@@ -88,7 +88,7 @@ warnings.filterwarnings("ignore")
 #typically OK, but can be adjusted if odeint produces garbage.
 
 max_light_change=1
-points_per_segment=100
+points_per_segment=1000
 
 
 #the following code sets up a light regime based on sin waves. The wave can 
@@ -456,13 +456,13 @@ def make_waves():
     
     
     #a single, 5-min square wave with peak intensity of 300 uE
-    baseline_duration=150 #in seconds
+    baseline_duration=0 #in seconds
     baseline_intensity=0 #dark baseline
-    pulse_duration=300 #300 seconds pulse
-    pulse_intensity=300 #pulse is 1000 units
-    recovery_duration = 600 #100 seconds recovery
+    pulse_duration=1200 #300 seconds pulse
+    pulse_intensity=100 #pulse is 1000 units
+    recovery_duration = 300 #100 seconds recovery
     recovery_intensity=0 #recovery is dark
-    rise_time=1 #100 ms for the light to rise
+    rise_time=1 #10 ms for the light to rise
     time_units='seconds' 
     point_frequency=100 #start with a frequency of 1000 points per subtrace
     repeat_cycles=1 #do this once
@@ -470,104 +470,40 @@ def make_waves():
                         pulse_duration, pulse_intensity, recovery_duration, recovery_intensity, 
                         rise_time, time_units, point_frequency, repeat_cycles)
     
-    light_pattern['single_square_5_min_300_max']=wave
+    light_pattern['single_square_20_min_100_max']=wave
 
-    #a single, 5-min square wave with peak intensity of 600 uE
-    baseline_duration=150 #in seconds
+    #a single, 20-min square wave with peak intensity of 225 uE/m2/s
+    baseline_duration=0 #in seconds
     baseline_intensity=0 #dark baseline
-    pulse_duration=300 #300 seconds pulse
-    pulse_intensity=400 #pulse is 1000 units
-    recovery_duration = 500 #100 seconds recovery
+    pulse_duration=1200 #20 min light
+    pulse_intensity=225 #light intesntisy is 225 uE
+    recovery_duration = 300 #5 min recovery
     recovery_intensity=0 #recovery is dark
-    rise_time=1 #100 ms for the light to rise
+    rise_time=1 #10 ms for the light to rise
     time_units='seconds' 
     point_frequency=100 #start with a frequency of 1000 points per subtrace
     repeat_cycles=1 #do this once
     wave=generate_square_wave_based_light_sequence (baseline_duration, baseline_intensity,
                         pulse_duration, pulse_intensity, recovery_duration, recovery_intensity, 
                         rise_time, time_units, point_frequency, repeat_cycles)
-    light_pattern['single_square_5_min_600_max']=wave
+    light_pattern['single_square_20_min_225_max']=wave
     
-    #make a single one-hour sin wave with max PAR of 300 uE
-    total_duration=60*60 #duration is in seconds, so we do 3600 
-    light_frequency=1/(60*60) #make the frequency the same as the duration to get one cycle
-    points_per_second=10
-    max_PAR=300
-    wave=generate_sin_wave (total_duration, max_PAR, light_frequency, points_per_second)
-    light_pattern['single_sin_wave_1_hr_300_max']=wave
-            
-    #make a single one-hour sin wave with max PAR of 300 uE
-    total_duration=60*60 #duration is in seconds, so we do 3600 
-    light_frequency=1/(60*60) #make the frequency the same as the duration to get one cycle
-    points_per_second=10
-    max_PAR=400
-    wave=generate_sin_wave (total_duration, max_PAR, light_frequency, points_per_second)
-    light_pattern['single_sin_wave_1_hr_600_max']=wave
-    
-    
-    #make a single 5-min sin wave with max PAR of 300 uE
-    total_duration=5*60 #duration is in seconds, so we do 3600 
-    light_frequency=1/total_duration #make the frequency the same as the duration to get one cycle
-    points_per_second=100
-    max_PAR=300
-    wave=generate_sin_wave (total_duration, max_PAR, light_frequency, points_per_second)
-    light_pattern['single_sin_wave_5_min_300_max']=wave
-    
-    
-    #make a single one-hour set ot 5-min sin wave with max PAR of 300 uE
-    light_pattern['one-hour_sin_wave_5_min_300_max']=multiply_light_pattern(light_pattern['single_sin_wave_5_min_300_max'], 12)
-    
-    #make a single 1-min sin wave with max PAR of 300 uE
-    total_duration=60 #duration is in seconds, so we do 3600 
-    light_frequency=1/total_duration #make the frequency the same as the duration to get one cycle
-    points_per_second=100
-    max_PAR=300
-    wave=generate_sin_wave (total_duration, max_PAR, light_frequency, points_per_second)
-    light_pattern['single_sin_wave_1_min_300_max']=wave
-    
-    
-    #make a single 10-second sin wave with max PAR of 300 uE
-    total_duration=10 #duration is in seconds, so we do 3600 
-    light_frequency=1/total_duration #make the frequency the same as the duration to get one cycle
-    points_per_second=100
-    max_PAR=300
-    wave=generate_sin_wave (total_duration, max_PAR, light_frequency, points_per_second)
-    light_pattern['single_sin_wave_10_s_300_max']=wave
-    
-    #make a single one-hour set of 10-sec sin wave with max PAR of 300 uE
-    light_pattern['one-hour_sin_wave_10-sec_300_max']=multiply_light_pattern(light_pattern['single_sin_wave_10_s_300_max'], 6*60)
-    
-    #a one-hour series of square wave pulses at 300 uE
-    baseline_duration=75 #75 seconds dark
+    #a single, 20-min square wave with peak intensity of 225 uE/m2/s
+    baseline_duration=0 #in seconds
     baseline_intensity=0 #dark baseline
-    pulse_duration=150 #150 seconds pulse
-    pulse_intensity=300 #pulse is 300 units
-    recovery_duration = 75 #75 seconds recovery
+    pulse_duration=1200 #20 min light
+    pulse_intensity=500 #light intesntisy is 500 uE
+    recovery_duration = 300 #5 min recovery
     recovery_intensity=0 #recovery is dark
-    rise_time=1 # 1 s for the light to rise or fall
+    rise_time=1 #10 ms for the light to rise
     time_units='seconds' 
-    point_frequency=100 #start with a frequency of 100 points per subtrace
-    repeat_cycles=12 # The duration of the sin wave was one hour. Each pulse in this wave is 5 min, so do 12 of them
+    point_frequency=100 #start with a frequency of 1000 points per subtrace
+    repeat_cycles=1 #do this once
     wave=generate_square_wave_based_light_sequence (baseline_duration, baseline_intensity,
                         pulse_duration, pulse_intensity, recovery_duration, recovery_intensity, 
                         rise_time, time_units, point_frequency, repeat_cycles)
-    light_pattern['one_hour_5_min_cycle_square_wave_max_PAR_300']=wave
+    light_pattern['single_square_20_min_500_max']=wave
     
-    #a one-hour series of square wave pulses at 300 uE
-    baseline_duration=75 #75 seconds dark
-    baseline_intensity=0 #dark baseline
-    pulse_duration=150 #150 seconds pulse
-    pulse_intensity=400 #pulse is 300 units
-    recovery_duration = 75 #75 seconds recovery
-    recovery_intensity=0 #recovery is dark
-    rise_time=1 # 1 s for the light to rise or fall
-    time_units='seconds' 
-    point_frequency=100 #start with a frequency of 100 points per subtrace
-    repeat_cycles=12 # The duration of the sin wave was one hour. Each pulse in this wave is 5 min, so do 12 of them                                        
-    wave=generate_square_wave_based_light_sequence (baseline_duration, baseline_intensity,
-                        pulse_duration, pulse_intensity, recovery_duration, recovery_intensity, 
-                        rise_time, time_units, point_frequency, repeat_cycles)
-    light_pattern['one_hour_5_min_cycle_square_wave_max_PAR_600']=wave
     return(light_pattern)
 
 """
@@ -751,7 +687,7 @@ def calc_v_VDE(VDE_max_turnover_number, pKvde, VDE_Hill, kZE, pHlumen, V, Z):
     #kZE is the rate constant for the ZE reaction
 
     #pHmod is the fraction of VDE complex that is deprotonated
-    pHmod=1-(1 - (1 / (10 ** (VDE_Hill*(pHlumen - pKvde)) + 1)))
+    pHmod= 1 / (10 ** (VDE_Hill*(pHlumen - pKvde)) + 1)
     
     #pHmod=1-(1 - (1 / (10 ** (VDE_Hill*(pHlumen - pKvde) + 1))))
     #pHmod=(1-(1 / (10 ** (VDE_Hill*(pHlumen - pKvde) + 1))))
@@ -771,7 +707,7 @@ def calc_PsbS_Protonation(pKPsbS, pHlumen):
     #kZE is the rate constant for the ZE reaction
 
     #pHmod is the fraction of VDE complex that is deprotonated
-    PsbS_H=1-(1 - (1 / (10 ** ((pHlumen - pKPsbS)) + 1)))
+    PsbS_H=1 / (10 ** ((pHlumen - pKPsbS)) + 1)
     
     return(PsbS_H)
 
@@ -929,14 +865,15 @@ def recombination_with_pH_effects(k_recomb, QAm, Dy, pHlumen, fraction_pH_effect
 #Function f calculates the changes in state for the entire systems
 
 def f(y, t, pKreg, max_PSII, kQA, max_b6f, lumen_protons_per_turnover, PAR, ATP_synthase_max_turnover, 
-    pHstroma, antenna_size, Volts_per_charge, perm_K, n, Em7_PQH2, Em7_PC, PSI_antenna_size, 
+    pHstroma, PSII_antenna_size, Volts_per_charge, perm_K, n, Em7_PQH2, Em7_PC, PSI_antenna_size, 
     buffering_capacity, VDE_max_turnover_number, pKvde, VDE_Hill, kZE, pKPsbS, max_NPQ, k_recomb, k_PC_to_P700, 
     triplet_yield, triplet_to_singletO2_yield, fraction_pH_effect, k_Fd_to_NADP, k_CBC, k_KEA): 
 
     #The following are holders for paramters for testing internal functions of f
-    light_per_L=PAR
+    light_per_L=0.84 * PAR/3.3# 1000 umol Chl/m2, PSII/300 Chl ==> 3.3 umol PSII/m2, ==>(PAR/3.3) photons/PSII
+    ###So the light_per_L means the photons/PSII that hit all the thylakoid membranes, and absorbed by the leaf
+    #the 0.84 is the fraction of light a leaf typically absorbs
     
-    #Transfer the dependent parameters (things that change)
     QA, QAm, PQ, PQH2, Hin, pHlumen, Dy, pmf, deltaGatp, Klumen, Kstroma, ATP_made, PC_ox, PC_red, P700_ox, P700_red, Z, V, NPQ, singletO2, Phi2, LEF, Fd_ox, Fd_red, ATP_pool, ADP_pool, NADPH_pool, NADP_pool =y
     
     PSII_recombination_v=recombination_with_pH_effects(k_recomb, QAm, Dy, pHlumen, fraction_pH_effect)
@@ -954,7 +891,7 @@ def f(y, t, pKreg, max_PSII, kQA, max_b6f, lumen_protons_per_turnover, PAR, ATP_
     Phi2=Calc_Phi2(QA, NPQ) #I use the current' value of NPQ. I then calculate the difference below 
 
     #calculate the number of charge separations in PSII per second
-    PSII_charge_separations=light_per_L * Phi2 - PSII_recombination_v
+    PSII_charge_separations=PSII_antenna_size*light_per_L * Phi2 - PSII_recombination_v
     
     #The equilibrium constant for sharing electrons between QA and the PQ pool
     #This parameter will be placed in the constants set in next revision
@@ -974,14 +911,17 @@ def f(y, t, pKreg, max_PSII, kQA, max_b6f, lumen_protons_per_turnover, PAR, ATP_
 
     #b6f_content describes the relative (to standaard PSII) content of b6f 
     #This parameter will be placed in the constants set in next revision
-    b6f_content=1
+    b6f_content=0.44 #Journal of Experimental Botany, Vol. 65, No. 8, pp. 1955–1972, 2014
+    #doi:10.1093/jxb/eru090 Advance Access publication 12 March, 2014
     
     #calc_v_b6f return the rate of electron flow through the b6f complex
     v_b6f=calc_v_b6f(max_b6f, b6f_content, pHlumen, pKreg, PQ, PQH2, PC_ox, PC_red, Em7_PC, Em7_PQH2, pmf)
 
     #calculate the change in PQH2 redox state considering the following:
     #PQ + QAm --> PQH2 + QA ; PQH2 + b6f --> PQ    
-    dPQH2 = QAm * PQ * kQA - v_b6f - + PQH2*QA*kQA/Keq_QA_PQ 
+    PSI_charge_separations= P700_red * light_per_L * PSI_antenna_size * Fd_ox 
+
+    dPQH2 = QAm * PQ * kQA - v_b6f - PQH2*QA*kQA/Keq_QA_PQ 
     dPQ = -1*dPQH2
 
     #***************************************************************************************
@@ -992,7 +932,6 @@ def f(y, t, pKreg, max_PSII, kQA, max_b6f, lumen_protons_per_turnover, PAR, ATP_
     #but does consider the need for oxidized Fd.
     #At this point, I assumed that the total Fd pool is unity
     
-    PSI_charge_separations= P700_red * light_per_L * PSI_antenna_size * Fd_ox 
     
     #P700 reactions
     d_P700_ox = PSI_charge_separations - PC_red * k_PC_to_P700 * P700_ox
@@ -1005,7 +944,7 @@ def f(y, t, pKreg, max_PSII, kQA, max_b6f, lumen_protons_per_turnover, PAR, ATP_
     dFd_red=PSI_charge_separations - k_Fd_to_NADP*Fd_red*NADP_pool
     dFd_ox=-1*dFd_red
     
-    dNADPH_pool=k_Fd_to_NADP*NADP_pool*Fd_red - NADPH_pool*k_CBC
+    dNADPH_pool=k_Fd_to_NADP*NADP_pool*Fd_red - NADPH_pool*k_CBC*(1-np.exp(-t/900))
     dNADP_pool=-1*dNADPH_pool
     
     dLEF=k_Fd_to_NADP*NADP_pool*Fd_red
@@ -1203,7 +1142,8 @@ def f(y, t, pKreg, max_PSII, kQA, max_b6f, lumen_protons_per_turnover, PAR, ATP_
     
     #calculate NPQ, based on a simple relationahip between
     #the concentration of Z and the protonation state of PsbS
-    new_NPQ=max_NPQ*new_PsbS_H*new_Z
+    #Half contribution from Z but PsbS dependent, half from PsbS alone
+    new_NPQ=0.5*max_NPQ*new_PsbS_H*new_Z+0.5*max_NPQ*new_PsbS_H
     
     #feed this into odeint by calculating the change in NPQ compared to the previous
     #time point
@@ -1390,11 +1330,8 @@ def do_complete_sim(y, constants_set_and_trace_times, Kx):
     PSII_cross_section=0.45
     for i in range(0,len(Phi2_array)):
         LEF_array_from_Phi2.append(light_curve[i]*Phi2_array[i]*PSII_cross_section)
-    
-    LEF_array_from_Phi2=[]
-    PSII_cross_section=0.45
-    for i in range(0,len(Phi2_array)):
-        LEF_array_from_Phi2.append(light_curve[i]*Phi2_array[i]*PSII_cross_section)
+    ###how about PSII_cross_section = 0.5 and then times leaf absorbance of 0.85?
+
 
     # calculate singletO2_rate
     singletO2_array = output['singletO2_array']
@@ -2625,14 +2562,16 @@ class standard_constants(object):
     #paramweters for PsbS protonation 
     #***************************************************************************************
 
-    pKPsbS=6.4  #pKa for protonation of PsbS, assuming Hill coefficient=1
-    max_NPQ=5
+    pKPsbS=6.0  #pKa for protonation of PsbS, assuming Hill coefficient=1
+    max_NPQ=3  #this max_NPQ is how much PsbS can result in, Zeaxanthin can play half of it
+    # but PsbS dependent, PsbS can independent play half of it
 
     pHstroma_initial=7.8
     #***************************************************************************************
     #paramweters for ATP SYNTHASE
     #***************************************************************************************
-    ATP_synthase_content=1
+    ATP_synthase_content=0.32 ##Journal of Experimental Botany, Vol. 65, No. 8, pp. 1955–1972, 2014
+    #doi:10.1093/jxb/eru090 Advance Access publication 12 March, 2014
     ATP_synthase_max_turnover=1000*ATP_synthase_content
 
 
@@ -2666,7 +2605,8 @@ class standard_constants(object):
     #***************************************************************************************
     # b6f reactions
     #***************************************************************************************
-    b6f_content=1
+    b6f_content=0.44#Journal of Experimental Botany, Vol. 65, No. 8, pp. 1955–1972, 2014
+    #doi:10.1093/jxb/eru090 Advance Access publication 12 March, 2014
     max_b6f=500
     pKreg=6.5
     Em7_PC=0.37
@@ -2679,7 +2619,7 @@ class standard_constants(object):
     #lumen per PSII
     buffering_capacity=.03
 
-    PSI_antenna_size=1 #setting this to the same valus as PSII_antenna_size will imply that 
+    PSI_antenna_size=0.5 #setting this to the same valus as PSII_antenna_size will imply that 
                         #equal numbers of photons hit the two photosystems
 
     k_PC_to_P700=500 #rate constant for oxidation of PC by P700+
@@ -2688,13 +2628,13 @@ class standard_constants(object):
     # Proton exchange through the KEA3 system
     #***************************************************************************************
 
-    k_KEA=0
+    k_KEA=100
 
     #***************************************************************************************
     #parameters for PSII reactions 
     #***************************************************************************************
     max_PSII=1     
-    PSII_antenna_size=1
+    PSII_antenna_size=0.5
 
     kQA=1000  #the rate constant for oxidation of QA- by PQ
 
@@ -2715,7 +2655,7 @@ class standard_constants(object):
 
     k_Fd_to_NADP=1000 #rate constant for transfer of electrons from Fd to NADP
     
-    k_CBC=3000 #rate constant for the Calvin-Benson cycle
+    k_CBC=60 #max rate constant for the Calvin-Benson cycle in terms of NADPH consumption
     
 
 #***************************************************************************************
@@ -2733,14 +2673,14 @@ class standard_initial_states(object):
     #start with no ATP made
     ATP_made_initial=0
     PQH2=0
-    PQ=6
+    PQ=7#the 6:1 ratio was shown in original appendix file.
     PC_ox=0
     PC_red=2
     pmf=0
     pHlumen=7
 
     Klumen_initial=.04
-    Kstroma_initial=.04
+    Kstroma_initial=.15
     
     #***************************************************************************************
     #DGATP value. The current program will keep this constant
@@ -2814,10 +2754,10 @@ class standard_initial_states(object):
     #parameters for P700 reactions 
     #***************************************************************************************
 
-    P700_ox_initial=0
-    P700_red_initial=1
-    PSI_content=P700_red_initial + P700_ox_initial
-    PSI_antenna_size=1 #setting this to the same valus as PSII_antenna_size will imply that 
+    P700_ox_initial=0.0
+    P700_red_initial=0.75
+    PSI_content=P700_red_initial + P700_ox_initial#PSI/PSII = 0.75, see doi:10.1093/jxb/eru090
+    PSI_antenna_size=0.5 #setting this to the same valus as PSII_antenna_size will imply that 
                         #equal numbers of photons hit the two photosystems
 
 
@@ -2833,8 +2773,8 @@ class standard_initial_states(object):
     singletO2_initial=0
     ATP_pool_initial=30
     ADP_pool_initial=30
-    NADPH_pool_initial=0
-    NADP_pool_initial=1
+    NADPH_pool_initial=1
+    NADP_pool_initial=2
     
 #*******************************************************************************
 #*******************************************************************************
@@ -2853,7 +2793,7 @@ class sim_constants(FrozenClass):
         self.light_per_L=S.light_per_L
         self.ATP_synthase_max_turnover=S.ATP_synthase_max_turnover
         self.pHstroma=S.pHstroma_initial
-        self.antenna_size=S.PSII_antenna_size
+        self.PSII_antenna_size=S.PSII_antenna_size
         self.Volts_per_charge=S.Volts_per_charge
         self.perm_K=S.perm_K
         self.n=S.n
@@ -2872,13 +2812,13 @@ class sim_constants(FrozenClass):
         self.triplet_yield=S.triplet_yield
         self.triplet_to_singletO2_yield=S.triplet_to_singletO2_yield
         self.fraction_pH_effect=0.25
-        self.k_Fd_to_NADP=5000
-        self.k_CBC=3000
-        self.k_KEA=100
+        self.k_Fd_to_NADP=S.k_Fd_to_NADP
+        self.k_CBC=S.k_CBC
+        self.k_KEA=S.k_KEA
         
     def as_tuple(self):
         c=(self.pKreg, self.max_PSII, self.kQA, self.max_b6f, self.lumen_protons_per_turnover, self.light_per_L,
-        self.ATP_synthase_max_turnover,self.pHstroma, self.antenna_size, self.Volts_per_charge, self.perm_K,
+        self.ATP_synthase_max_turnover,self.pHstroma, self.PSII_antenna_size, self.Volts_per_charge, self.perm_K,
         self.n, self.Em7_PQH2, self.Em7_PC, self.PSI_antenna_size, self.buffering_capacity, 
         self.VDE_max_turnover_number, self.pKvde, self.VDE_Hill, self.kZE, self.pKPsbS, self.max_NPQ, 
         self.k_recomb, self.k_PC_to_P700, self.triplet_yield, self.triplet_to_singletO2_yield, 
@@ -2890,7 +2830,7 @@ class sim_constants(FrozenClass):
         d={'pKreg':self.pKreg, 'max_PSII':self.max_PSII,'kQA': self.kQA, 'max_b6f': self.max_b6f, 
         'lumen_protons_per_turnover': self.lumen_protons_per_turnover, 'light_per_L':self.light_per_L,
         'ATP_synthase_max_turnover': self.ATP_synthase_max_turnover, 'pHstroma': self.pHstroma, 
-        'antenna_size': self.antenna_size, 'Volts_per_chargese': self.Volts_per_charge, 
+        'PSII_antenna_size': self.PSII_antenna_size, 'Volts_per_chargese': self.Volts_per_charge, 
         'perm_K': self.perm_K, 'n': self.n, 'Em7_PQH2': self.Em7_PQH2, 'Em7_PC': self.Em7_PC, 
         'PSI_antenna_size': self.PSI_antenna_size, 'buffering_capacity': self.buffering_capacity, 
         'VDE_max_turnover_number': self.VDE_max_turnover_number, 'pKvde': self.pKvde, 'VDE_Hill': self.VDE_Hill, 
@@ -2909,7 +2849,7 @@ class sim_constants(FrozenClass):
         'light_per_L':'PAR photons per PSII',
         'ATP_synthase_max_turnover': 'Defines the slope of ATP synthesis per pmf', 
         'pHstroma': 'The pH of the stroma', 
-        'antenna_size': 'The relative antenna size of PSII', 
+        'PSII_antenna_size': 'The relative antenna size of PSII', 
         'Volts_per_chargese': 'The capcitance of the thylakoid expressed as V/charge/PSII', 
         'perm_K': 'The relative permeability of the thylakoid to counterions', 
         'n': 'The stoichiometry of H+/ATP at the ATP synthase', 
@@ -3133,6 +3073,27 @@ light_pattern=make_waves()
 
 #The following code generates a series of diurnal light patters, with either smooth or fluctuating
 #patterns
+initial_sim_states=sim_states()
+initial_sim_state_list=initial_sim_states.as_list()
+Kx_initial=sim_constants()
 
+All_Constants_Table('Standard Constants', Kx_initial)
+output_dict={}
+constants_dict={}
+starting_conditions_dict={}
+on='single square wave permK=normal' #the output name
+
+Kx=sim_constants() #generrate arrays contining optimized time segments for the simulation
+
+constants_dict[on]=Kx #store constants in constants_dict
+
+output_dict[on], starting_conditions_dict[on]=sim(Kx, initial_sim_state_list, 
+                                        light_pattern['single_square_20_min_500_max'], 
+                                        max_light_change, points_per_segment)
+
+Changed_Constants_Table('Change Constants', Kx_initial, Kx)
+
+#plot out the "interesting features"
+plot_interesting_stuff('Test Output 1', output_dict[on])
 
 

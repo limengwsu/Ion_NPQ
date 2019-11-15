@@ -22,6 +22,7 @@ import pandas as pd
 from scipy import integrate
 from scipy import signal
 from IPython.core.display import display, HTML
+import csv
 
 
 #*******************************************************************************
@@ -59,13 +60,17 @@ species_labels = [
     'ATP_pool',
     'ADP_pool',
     'NADPH_pool',
-    'NADP_pool'
+    'NADP_pool',
+    'Cl_lumen',
+    'Cl_stroma',
+    'Hstroma',
+    'pHstroma'
     ]
 
 
 #Location for the PDF files describing the parameters
 #This can be over-written during the actual run
-PDF_file_location='/Users/davidkramer/Dropbox/Data/DF_ECS/Params.png/' 
+#PDF_file_location='/Users/davidkramer/Dropbox/Data/DF_ECS/Params.png/' 
 
 #In several places the code sometimes returns Nans resulting from divisions by 
 #zero. This code supresses the warnings to de-clutter the display.
@@ -488,7 +493,7 @@ def make_waves():
                         rise_time, time_units, point_frequency, repeat_cycles)
     light_pattern['single_square_20_min_225_max']=wave
     
-    #a single, 20-min square wave with peak intensity of 225 uE/m2/s
+    #a single, 20-min square wave with peak intensity of 500 uE/m2/s
     baseline_duration=0 #in seconds
     baseline_intensity=0 #dark baseline
     pulse_duration=1200 #20 min light
@@ -503,6 +508,23 @@ def make_waves():
                         pulse_duration, pulse_intensity, recovery_duration, recovery_intensity, 
                         rise_time, time_units, point_frequency, repeat_cycles)
     light_pattern['single_square_20_min_500_max']=wave
+    
+    
+    #a single, 20-min square wave with peak intensity of 500 uE/m2/s
+    baseline_duration=0 #in seconds
+    baseline_intensity=0 #dark baseline
+    pulse_duration=1200 #20 min light
+    pulse_intensity=0 #light intesntisy is 500 uE
+    recovery_duration = 300 #5 min recovery
+    recovery_intensity=0 #recovery is dark
+    rise_time=1 #10 ms for the light to rise
+    time_units='seconds' 
+    point_frequency=100 #start with a frequency of 1000 points per subtrace
+    repeat_cycles=1 #do this once
+    wave=generate_square_wave_based_light_sequence (baseline_duration, baseline_intensity,
+                        pulse_duration, pulse_intensity, recovery_duration, recovery_intensity, 
+                        rise_time, time_units, point_frequency, repeat_cycles)
+    light_pattern['single_square_20_min_0_max']=wave
     
     return(light_pattern)
 
@@ -676,8 +698,46 @@ def calc_v_b6f(max_b6f, b6f_content, pHlumen, pKreg, PQ, PQH2, PC_ox, PC_red, Em
     f_PQ=1-f_PQH2
     v_b6f=f_PQH2*PC_ox*k_b6f - f_PQ*PC_red*k_b6f_reverse 
     return(v_b6f)
+"""
+Notes on the NDH activity for CEF
+  Forward reaction
+	Fd_red + 0.5 PQ + 3H_stroma --k_NDH--> Fd_ox + 0.5 PQH2 + 2H_lumen
 
+  Reverse reaction
+	Fd_red + 0.5 PQ + 3H_stroma <--k_NDH_reverse-- Fd_ox + 0.5 PQH2 + 2H_lumen
 
+Em_Fd = -0.42
+Em_PQH2_7 = 0.11
+Em_PQH2 = 0.11 - 0.06*(pHstroma-7.0), # T = 20 degree C
+
+deltaEm = Em_PQH2 - Em_Fd = 0.53 - 0.06*(pHstroma-7.0)
+
+deltaG_NDH = z*F*deltaEm + 2*F*pmf, 
+here z = -1, and 2 is for the number of protons pumped by NDH, so
+Keq_NDH = 10 **(((0.53-0.06*(pHstroma-7.0)-2*pmf)/0.06)
+
+Assuming k_NADH = 100/s
+k_NDH_reverse = k_NDH /Keq_NDH
+
+v_NDH = k_NDH*Fd_red*f_PQ - k_NDH_reverse*Fd_ox*f_PQH2
+
+For each e- transferred, d_charge = 2, dH_lumen = 2, dH_stroma = -3
+"""
+def calc_v_NDH(Em_Fd, Em7_PQH2, pHstroma, pmf, k_NDH, Fd_red, Fd_ox, PQ, PQH2):
+    Em_PQH2 = Em7_PQH2 - 0.06*(pHstroma - 7.0)
+    deltaEm = Em_PQH2 - Em_Fd
+    Keq_NDH = 10**((deltaEm - pmf*2)/0.06)
+    k_NDH_reverse = k_NDH/Keq_NDH
+    #f_PQ = PQ/(PQ+PQH2)
+    #f_PQH2 = 1.0-f_PQ
+    v_NDH = k_NDH*Fd_red*PQ - k_NDH_reverse*Fd_ox*PQH2
+    return (v_NDH)
+def calc_v_PGR(PGR_vmax, Fd_red, PQ, PQH2):
+    #Fd_red + 1/2PQ + H+_Stroma--> Fd_ox +1/2 PQH2, Hill coefficient for PGR assumed at 4
+    #without considering back reaction,this is the guess of PGR5/PGRL1 cyclic etr
+    v_PGR = PGR_vmax * (Fd_red**4/(Fd_red**4+0.1**4))*PQ/(PQ+PQH2)
+    #The reason 0.1 was chose is that Fd_red level does not seem to go over 0.2
+    return v_PGR
 #calculate the rate of V<-- -->Z reactions, assuming a pH-dependent VDE and a pH-independent ZE
 def calc_v_VDE(VDE_max_turnover_number, pKvde, VDE_Hill, kZE, pHlumen, V, Z):    
 
@@ -707,28 +767,11 @@ def calc_PsbS_Protonation(pKPsbS, pHlumen):
     #kZE is the rate constant for the ZE reaction
 
     #pHmod is the fraction of VDE complex that is deprotonated
-    PsbS_H=1 / (10 ** ((pHlumen - pKPsbS)) + 1)
+    PsbS_H=1 / (10 ** (3*(pHlumen - pKPsbS)) + 1)
     
     return(PsbS_H)
 
 """
-
-ATP synthase pmf + ADP + Pi --gHplus--> ATP   
-I use a very simple model, described in the following:
-The flux gthrough an active ATP synthase is roughly Ohmic
-with an intrinsive slope (gH+)  protons per second per volt pmf. 
-
-From Takizawa et al:
-
-K. Takizawa, A. Kanazawa, J.A. Cruz, D.M. Kramer (2007) 
-In vivo thylakoid proton motive force.  Quantitative non-
-invasive probes show the relative lumen pH-induced regulatory 
-responses of antenna and electron transfer. Biochim Biophys 
-Acta 1767 1233–1244.
-
-We get about 3 H+/mV, so:
- gH_plus_int= 3000 H+/s.V
-
 However, one may also consider that there is a maximal (saturating turover rate 
 (saturation point), as shown by Junesch and Grabber (1991)
 http://dx.doi.org/10.1016/0014-5793(91)81447-G
@@ -736,9 +779,76 @@ Their data shows a roughly n=1 pmf-dependence, similar to a pH titration curve, 
 be simulated by changing the code to include this term.
     
 """
+def ATP_synthase_actvt(t):#based on gH+ data
+    x = t/165
+    actvt = 0.2 + 0.8*(x**4/(x**4 + 1))
+    #x = t/174.5
+    #nth = (x-1)*3.1
+    #actvt = 0.112 + 0.888*1/(1+np.exp(-nth))
+    #actvt can be treated as pmf responsive fraction and 1-actvt is pmf_inert fraction
+    #this actvt may due to ATP synthase oxidized-->reduced delay or/and ATP/ADP, Pi limitation
 
-def Vproton(ATP_synthase_max_turnover, n, pmf, pmf_act):
-    return (ATP_synthase_max_turnover*n*(1 - (1 / (10 ** ((pmf - pmf_act)/.06) + 1))))
+    return actvt
+    
+def Vproton_pmf_actvt(pmf, actvt, ATP_synthase_max_turnover, n):# fraction of activity based on pmf, pmf_act is the half_max actvt pmf
+    v_proton_active = 1 - (1 / (10 ** ((pmf - 0.132)*1.5/0.06) + 1))#reduced ATP synthase
+    v_proton_inert = 1-(1 / (10 ** ((pmf - 0.204)*1.5/0.06) + 1))#oxidized ATP synthase
+    
+    v_active = actvt * v_proton_active * n * ATP_synthase_max_turnover
+    v_inert = (1-actvt) * v_proton_inert * n * ATP_synthase_max_turnover
+    
+    v_proton_ATP = v_active + v_inert
+
+    #the factor 1.5 is used as a hill coefficient for ATP synthase, adjusted from reference Fig.3
+    #Note that the above experiments were done at deltaGatp = 30kJ/mol + RTln(1.2/5)
+    #so pmf_act needs to be adjusted by the following function ATP_deltaG into pmf_addition
+    return (v_proton_ATP)
+    #the following is another way to simulate, but it cannot realize observed data
+    #Patp_red = 1/(1+np.exp(-t+6))
+    #Patp_ox = 1- Patp_red
+    #pmf_act_red = 0.132 #see the following reference, dpH_half = 2.2 and 3.4 for red and ox
+    #pmf_act_ox = 0.204#Ulrike Junesch and Peter Graber BBA 893(1987) 275-288
+    #pmf_addition = ATP_pmf_addition(ATP_pool, ADP_pool, Pi)
+    #pmf_addition is the deltaG difference between realtime deltaGatp and reference
+    #experimental deltaGatp, and then converted to pmf units
+    #pmf_act_red = pmf_act_red + pmf_addition
+def V_H_light(light_per_L, v_proton_ATPase, pmf, Hlumen, k_leak = 3*10**7):
+    if light_per_L>0.0:
+        V_H = v_proton_ATPase + pmf*k_leak*Hlumen
+    else:
+        V_H = pmf*k_leak*Hlumen# this term is used for dark relaxation,
+        #ATP synthase actvt dependent but does not make ATP
+    return V_H
+
+def calc_CBC_NADPH(k_CBC,t,d_ATP_made):
+    NADPH_CBC_t =  k_CBC*(1.0-np.exp(-t/600))
+    NADPH_CBC_ATP =0.6*d_ATP_made
+    NADPH_CBC = min([NADPH_CBC_ATP,NADPH_CBC_t])
+    return NADPH_CBC
+        
+
+def Calc_Dy(CIONlumen,CIONstroma, AIONlumen,AIONstroma):
+    Dy_ION = 0.06*np.log10((CIONlumen+0.5*AIONstroma)/(CIONstroma+0.5*AIONlumen))
+    #absolute value of electrical potential, the 0.5 is due to the PCl- = 0.5 PK+
+    return Dy_ION
+
+def calc_pmf_act(ATP_pool, ADP_pool, Pi):
+    DeltaGatp_zero =  36.0#Petersen et al. 2012 PNAS, comparsion of the H+/ATP ratios of mF0F1 cF0F1 ATP synthase
+    DeltaDeltaGatp =2.44 * np.log(ATP_pool/(ADP_pool*Pi))#np.log is natural log
+    #the pH effect in stroma is ignored at this stage
+    DeltaGatp_KJ_per_mol = DeltaGatp_zero + DeltaDeltaGatp
+    #"Taras K. Antal • Ilya B. Kovalenko, Andrew B. Rubin • Esa Tyystjarvi, Photosynthesis-related quantities for education and modeling. Photosynth Res (2013) 117:1–30
+    #D. Heineke et al., Redox transfer across the inner chloroplast envelope membrane. Plant Physiol. 95, 1131–1137 
+    #(1991). DeltaGatp_KJ_per_mol=50.0, this number should be under the light adapted conditions"
+    #Assuming Pi is 1.5 mM constant, under light ATP is 1 mM, then the ADP under light is 0.184 mM
+    #This agrees with report of ATP/ADP about 5 under the light adapted condition
+    #This gives a pool of ATP of 7/PSII, ADP 1.3/PSII under the light
+    #ATP/ADP = 1 for dark adapted plant.
+    
+    #convert DGATP into volts
+    pmf_act = DeltaGatp_KJ_per_mol/(96.485*4.667)#Faraday constant
+    #pmf_addition = DeltaDeltaGatp/(96.485*4.667) #Faraday constant
+    return (pmf_act)
 
 """
 # Calc_Phi2 gives an estiamte of Phi2 based on QA redox state
@@ -856,30 +966,45 @@ def recombination_with_pH_effects(k_recomb, QAm, Dy, pHlumen, fraction_pH_effect
     delta_delta_g_recomb= Dy + .06*(7.0-pHlumen)
     v_recomb = k_recomb*QAm*10**(delta_delta_g_recomb/.06)
     
-    #v_recomb = k_recomb*QAm*(10**((Dy/.06) + fraction_pH_effect*10**(7.0-pHlumen)))
-    
-    
+    #v_recomb = k_recomb*QAm*(10**((Dy/.06) + fraction_pH_effect*10**(7.0-pHlumen)))        
     return(v_recomb)
 
+def Cl_flux_relative(v):
+    Cl_flux_v = 332*(v**3) + 30.8*(v**2) + 3.6*v
+    #relative to Cl flux thru VCCN1. when driving force is 0.1 Volt,
+    #Cl_flux_v is 1. empirical equation was obtained from
+    # Herdean et al. 2016 DOI: 10.1038/ncomms11654
+    return Cl_flux_v
+
+def KEA_reg(pHlumen, QAm):
+    qL = 1-QAm
+    qL_act = qL**3/(qL**3+0.15**3)
+    pH_act =1/(10**(1*(pHlumen-6.0))+1)
+    f_KEA_act = qL_act * pH_act
+    return f_KEA_act
 
 #Function f calculates the changes in state for the entire systems
 
 def f(y, t, pKreg, max_PSII, kQA, max_b6f, lumen_protons_per_turnover, PAR, ATP_synthase_max_turnover, 
-    pHstroma, PSII_antenna_size, Volts_per_charge, perm_K, n, Em7_PQH2, Em7_PC, PSI_antenna_size, 
+    PSII_antenna_size, Volts_per_charge, perm_K, n, Em7_PQH2, Em7_PC,Em_Fd, PSI_antenna_size, 
     buffering_capacity, VDE_max_turnover_number, pKvde, VDE_Hill, kZE, pKPsbS, max_NPQ, k_recomb, k_PC_to_P700, 
-    triplet_yield, triplet_to_singletO2_yield, fraction_pH_effect, k_Fd_to_NADP, k_CBC, k_KEA): 
+    triplet_yield, triplet_to_singletO2_yield, fraction_pH_effect, k_Fd_to_NADP, k_CBC, k_KEA, k_VCCN1, k_CLCE, k_NDH): 
 
     #The following are holders for paramters for testing internal functions of f
-    light_per_L=0.84 * PAR/3.3# 1000 umol Chl/m2, PSII/300 Chl ==> 3.3 umol PSII/m2, ==>(PAR/3.3) photons/PSII
+    light_per_L=0.84 * PAR/0.7
+    #we got 4.1 nmol Chl per 19.6 mm^2 leaf disc, which translate into 210 umol Chl/m2
+    #210 umol Chl/m2, PSII/300 Chl ==> 0.7 umol PSII/m2, ==>(PAR/0.7) photons/PSII
     ###So the light_per_L means the photons/PSII that hit all the thylakoid membranes, and absorbed by the leaf
     #the 0.84 is the fraction of light a leaf typically absorbs
+
     
-    QA, QAm, PQ, PQH2, Hin, pHlumen, Dy, pmf, deltaGatp, Klumen, Kstroma, ATP_made, PC_ox, PC_red, P700_ox, P700_red, Z, V, NPQ, singletO2, Phi2, LEF, Fd_ox, Fd_red, ATP_pool, ADP_pool, NADPH_pool, NADP_pool =y
+    QA, QAm, PQ, PQH2, Hin, pHlumen, Dy, pmf, deltaGatp, Klumen, Kstroma, ATP_made,\
+    PC_ox, PC_red, P700_ox, P700_red, Z, V, NPQ, singletO2, Phi2, LEF, Fd_ox, Fd_red,\
+    ATP_pool, ADP_pool, NADPH_pool, NADP_pool,Cl_lumen, Cl_stroma, Hstroma, pHstroma =y
     
     PSII_recombination_v=recombination_with_pH_effects(k_recomb, QAm, Dy, pHlumen, fraction_pH_effect)
         
     dsingletO2=PSII_recombination_v*triplet_yield*triplet_to_singletO2_yield
-
 
     #calculate pmf from Dy and deltapH 
     pmf=Dy + 0.06*(pHstroma-pHlumen)
@@ -891,7 +1016,7 @@ def f(y, t, pKreg, max_PSII, kQA, max_b6f, lumen_protons_per_turnover, PAR, ATP_
     Phi2=Calc_Phi2(QA, NPQ) #I use the current' value of NPQ. I then calculate the difference below 
 
     #calculate the number of charge separations in PSII per second
-    PSII_charge_separations=PSII_antenna_size*light_per_L * Phi2 - PSII_recombination_v
+    PSII_charge_separations=PSII_antenna_size*light_per_L * Phi2
     
     #The equilibrium constant for sharing electrons between QA and the PQ pool
     #This parameter will be placed in the constants set in next revision
@@ -911,17 +1036,33 @@ def f(y, t, pKreg, max_PSII, kQA, max_b6f, lumen_protons_per_turnover, PAR, ATP_
 
     #b6f_content describes the relative (to standaard PSII) content of b6f 
     #This parameter will be placed in the constants set in next revision
-    b6f_content=0.44 #Journal of Experimental Botany, Vol. 65, No. 8, pp. 1955–1972, 2014
+    b6f_content=0.433 #Journal of Experimental Botany, Vol. 65, No. 8, pp. 1955–1972, 2014
     #doi:10.1093/jxb/eru090 Advance Access publication 12 March, 2014
-    
+    #Mathias Pribil1, Mathias Labs1 and Dario Leister1,2,* Structure and dynamics of thylakoids in land plantsJournal of Experimental Botany, Vol. 65, No. 8, pp. 1955–1972, 2014
+   
     #calc_v_b6f return the rate of electron flow through the b6f complex
     v_b6f=calc_v_b6f(max_b6f, b6f_content, pHlumen, pKreg, PQ, PQH2, PC_ox, PC_red, Em7_PC, Em7_PQH2, pmf)
+    
+    v_NDH = calc_v_NDH(Em_Fd, Em7_PQH2, pHstroma, pmf, k_NDH, Fd_red, Fd_ox, PQ, PQH2)
+    d_Hlumen_NDH = v_NDH*2 #change in lumen protons
+    d_charge_NDH = d_Hlumen_NDH # change in charges across the membrane
+    #d_Hstroma_NDH = v_NDH*3 # change in stroma protons
+    
+    ##PGR regulation, attempted
+    PGR_vmax = 0#It seems this function does not impact the kinetics much.
+    v_PGR = calc_v_PGR(PGR_vmax, Fd_red, PQ, PQH2)
 
     #calculate the change in PQH2 redox state considering the following:
     #PQ + QAm --> PQH2 + QA ; PQH2 + b6f --> PQ    
-    PSI_charge_separations= P700_red * light_per_L * PSI_antenna_size * Fd_ox 
+    PSI_charge_separations= P700_red * light_per_L * PSI_antenna_size * Fd_ox
+    #aleternatively,
+    #PSI_charge_separations = P700_red*light_per_L*PSI_antenna_size*FB/(FB+FB_minus)
+    #PSI_to_Fd = FB_minus*Fd_ox*k_FB_Fd
+    #d_FB_minus = PSI_charge_separations-PSI_to_Fd
+    #d_FB = -d_FB_minus
+    
 
-    dPQH2 = QAm * PQ * kQA - v_b6f - PQH2*QA*kQA/Keq_QA_PQ 
+    dPQH2 = (QAm * PQ * kQA + v_NDH + v_PGR - v_b6f - PQH2*QA*kQA/Keq_QA_PQ)*0.5 
     dPQ = -1*dPQH2
 
     #***************************************************************************************
@@ -941,32 +1082,50 @@ def f(y, t, pKreg, max_PSII, kQA, max_b6f, lumen_protons_per_turnover, PAR, ATP_
     d_PC_ox = PC_red * k_PC_to_P700 * P700_ox - v_b6f
     d_PC_red = -1*d_PC_ox
     
-    dFd_red=PSI_charge_separations - k_Fd_to_NADP*Fd_red*NADP_pool
+    #Mehler reaction, V_me = kme * [O2]*Fd_red/(Fd_red+Fd_ox), Hui Lyu and Dusan Lazar modeling...
+    V_me = 4*0.000265*Fd_red/(Fd_red+Fd_ox)
+    dFd_red=PSI_charge_separations - k_Fd_to_NADP*Fd_red*NADP_pool - v_NDH - v_PGR -V_me
     dFd_ox=-1*dFd_red
-    
-    dNADPH_pool=k_Fd_to_NADP*NADP_pool*Fd_red - NADPH_pool*k_CBC*(1-np.exp(-t/900))
-    dNADP_pool=-1*dNADPH_pool
-    
-    dLEF=k_Fd_to_NADP*NADP_pool*Fd_red
+    #alternatively,
+    #dFd_red = PSI_to_Fd - k_Fd_to_NADP*Fd_red*NADP_pool - v_NDH-V_me
     
     #***************************************************************************************
     # ATP synthase reactions:
     #***************************************************************************************
-    #the following is based on a simple linear m_l where the rate of ATP synthase is saimply 
-    #governed by the driving force, i.e. pmf-DGatp/n
-    # a more complex model, which has both pmf threshold and max rate is described in the following:
+    #However, one may also consider that there is a maximal (saturating turover rate 
+    #(saturation point), as shown by Junesch and Grabber (1991)
+    #http://dx.doi.org/10.1016/0014-5793(91)81447-G
     #    def Vproton(ATP_synthase_max_turnover, n, pmf, pmf_act):
     #    return (ATP_synthase_max_turnover*n*(1 - (1 / (10 ** ((pmf - pmf_act)/.06) + 1))))
     #vHplus=Vproton(ATP_synthase_max_turnover, n, pmf, pmf_act)
     
-    ATP_synthase_driving_force=pmf-(deltaGatp/n) #this is positive if pmf is sufficient to drive 
-                                                #reaction forward
-                                                
-    d_protons_to_ATP = ATP_synthase_max_turnover*n*ATP_synthase_driving_force 
+    #ATP_synthase_driving_force=pmf-(deltaGatp/n) #this is positive if pmf is sufficient to drive 
+    #reaction forward, assuming ATP synthase activity is time dependent, derived from gH+ data
+    # data courtesy from Geoff and Dave
+    #Pi = 0.0025 - ATP_pool/7000
+    #pmf_act = calc_pmf_act(ATP_pool, ADP_pool, Pi)
+    Hlumen = 10**(-1*pHlumen)
+    Hstroma = 10**(-1*pHstroma)
+    
+    activity = ATP_synthase_actvt(t)    
+    d_protons_to_ATP = Vproton_pmf_actvt(pmf, activity, ATP_synthase_max_turnover, n)
+    d_H_ATP_or_passive = V_H_light(light_per_L, d_protons_to_ATP, pmf, Hlumen)                              
+    #d_protons_to_ATP_red = Vproton(ATP_synthase_max_turnover, n, pmf, pmf_act_red)*Patp_red
+    #d_protons_to_ATP_ox = Vproton(ATP_synthase_max_turnover, n, pmf, pmf_act_ox)*Patp_ox
+    #d_protons_to_ATP = d_protons_to_ATP_red + d_protons_to_ATP_ox
         
     d_ATP_made=d_protons_to_ATP/n                                        
+    #The CBC is either limited by Phi2 or by the activation kinetics, take the minimum
+    #NADPH_phi_2 = (PSII_charge_separations - PSII_recombination_v)*0.5
+
+    NADPH_CBC = k_CBC*(1.0-np.exp(-t/600))*(np.log(NADPH_pool/NADP_pool)-np.log(1.25))/(np.log(3.5/1.25))#calc_CBC_NADPH(k_CBC, t, d_ATP_made)
+    #this number in "np.exp(-t/600)" is important, which impacts the shape of the curves
+    dNADPH_pool=0.5 * k_Fd_to_NADP*NADP_pool*Fd_red - NADPH_CBC
+    dNADP_pool=-1*dNADPH_pool
     
+    dLEF=k_Fd_to_NADP*NADP_pool*Fd_red
     
+    d_ATP_consumed = d_ATP_made#NADPH_CBC*5/3 + (ATP_pool/(ADP_pool+ATP_pool)-0.5)*1.2#ATP_pool*(ATP_pool/ADP_pool-1)
     #***************************************************************************************
     #Proton input (from PSII, b6f and PSI) and output (ATP synthase) reactions :
     #***************************************************************************************
@@ -999,91 +1158,41 @@ def f(y, t, pKreg, max_PSII, kQA, max_b6f, lumen_protons_per_turnover, PAR, ATP_
      
     #add up the changes in protons delivered to lumen
     #note: net_protons_in is the total number of protons input into the lumen, including both free and bound.
-    net_protons_in = d_protons_from_PSII + d_protons_from_b6f - d_protons_to_ATP
-    
-    
+    net_protons_in = d_protons_from_PSII + d_protons_from_b6f + d_Hlumen_NDH - d_H_ATP_or_passive
+    #net_protons_stroma = d_protons_to_ATP - v_b6f - d_Hstroma_NDH - QAm * PQ * kQA + PQH2*QA*kQA/Keq_QA_PQ  - dNADPH_pool - d_ATP_made
+    #each ATP synthesis consumes one proton
 
-    #***************************************************************************************
-    #Movement of K+ in response to Dy and K+ gradient
-    #***************************************************************************************    
-    #K_Keq=(Kstroma/Klumen)*10**(-1*Dy/.06)
-
-    #Caluclate the fluxes of counterions,
-    #in this case, chosing a representative cation, K+
-    #The equation considers both the Dy, differences
-    #ion K+ concentrations in lumen and stroma
-    # and permeability
-
-    #First, calculate the delta.mu(squiggle).K+
-    #For example, say Kstroma is .02 and Klumen is .002 
-    #then this favors lumen-movement of K
-    #with a delta_G of .06 V
-    #which would be balanced by a +.06 V pmf
+    #see appendix for explanation
     
-    #***********K_deltaG=(.06*np.log10(Kstroma/Klumen) - Dy)
-
-    #Next, use this to calculate a flux, which depends
-    #on the permeability of the thylakoid to K+, perm_K:
-    #*********** net_Klumen = perm_K * K_deltaG*(Klumen+Kstroma)/2
-    
-    #if Dy is +60 mV, then at equilibrium, Kstroma/Klumen should be 10, at which point Keq=1.
-    #the Keq is equal to kf/kr, so the rato of fluxes is 
-    
-    
-#    net_Klumen=perm_K * K_Keq - perm_K/K_Keq 
-    #calculate the change in lumen [K+] by multiplying the change in K+ ions
-    #by the factor lumen_protons_per_turnover that relates the standard
-    #complex concentration to volume:
-    #the term is called "lumen_protons_per_turnover" but is the same for 
-    #all species
-        
-   #*********** dKlumen = net_Klumen*lumen_protons_per_turnover
-    
-    #We assume that the stromal vaolume is large, so there should be 
-    #no substantial changes in K+
-    
-    #***********dKstroma=0 
-
-
-    ##############################revised form that includes KEA3 H+/K+ antiporter
-    
-    
-    #K_Keq=(Kstroma/Klumen)*10**(-1*Dy/.06)
-
-    #Caluclate the fluxes of counterions,
-    #in this case, chosing a representative cation, K+
-    
-    #The equation considers both the Dy, differences
-    #ion K+ concentrations in lumen and stroma
-    # and permeability
-    
-    #In this case, we now eplicitely include a H+/K+ antiporter
-
-    #First, calculate the delta.mu(squiggle).K+
-    #For example, say Kstroma is .02 and Klumen is .002 
-    #then this favors lumen-movement of K
-    #with a delta_G of .06 V
-    #which would be balanced by a +.06 V pmf
-    
-    K_deltaG=(.06*np.log10(Kstroma/Klumen) - Dy)
+    #K_deltaG=0.06*np.log10(Kstroma/Klumen) - Dy
     
     #the KEA reaction looks like this:
     # H+(lumen) + K+(stroma) <-- --> H+(stroma) + K+(lumen)
     #and the reaction is electroneutral, 
     #so the forward reaction will depend on DpH and DK+ as:
     
-    Hlumen = 10**(-1*pHlumen)
-    Hstroma = 10**(-1*pHstroma)
-    v_KEA = k_KEA*(Hlumen*Kstroma -  Hstroma*Klumen)
-
+    f_actvt = KEA_reg(pHlumen, QAm)
+    v_KEA = k_KEA*(Hlumen*Kstroma -  Hstroma*Klumen)*f_actvt#/(10**(2*(pHlumen-6.5))+1)
+    
+    #Pck = 1/(1+np.exp(39.5*0.66*(-0.003-Dy)))#probability of v_K_channel open
+    K_deltaG=-0.06*np.log10(Kstroma/Klumen) + Dy
+    v_K_channel = perm_K * K_deltaG*(Klumen+Kstroma)/2
+    
+   
+    #v_K_channel = Pck*perm_K * Dy * 39.5*(Klumen- Kstroma*np.exp(-39.5*Dy))/(1-np.exp(-39.5*Dy))#eq regular
+    #v_K_channel = Pck*perm_K * (Klumen*np.exp(39.5*Dy)- Kstroma*np.exp(-39.5*Dy))#eq Hui Lyu
+    #Adjusted from Hui Lyu and Dusan Lazar Journal of Theoretical Biology 413 (2017) 11-23, 39.5 = F/RT
+    #It seems the flux of K+ is behave similar between Kramer and Lazar simulations.
+    #Now the equation considers the  Goldman–Hodgkin–Katz flux equation
+    #Hille, Bertil (2001) Ion channels of excitable membranes, 3rd ed.,p. 445, ISBN 978-0-87893-321-1
+    
     #Next, use this to calculate a flux, which depends
     #on the permeability of the thylakoid to K+, perm_K:
-    net_Klumen = perm_K * K_deltaG*(Klumen+Kstroma)/2 + v_KEA
+    net_Klumen =  v_KEA - v_K_channel
     
     #if Dy is +60 mV, then at equilibrium, Kstroma/Klumen should be 10, at which point Keq=1.
     #the Keq is equal to kf/kr, so the rato of fluxes is 
-    
-    
+
     #net_Klumen=perm_K * K_Keq - perm_K/K_Keq 
     #calculate the change in lumen [K+] by multiplying the change in K+ ions
     #by the factor lumen_protons_per_turnover that relates the standard
@@ -1096,35 +1205,69 @@ def f(y, t, pKreg, max_PSII, kQA, max_b6f, lumen_protons_per_turnover, PAR, ATP_
     #We assume that the stromal vaolume is large, so there should be 
     #no substantial changes in K+
     
-    dKstroma=0 
+    dKstroma=0
+    #########now calculating the movement of Cl- and its impact####
+
+    driving_force_Cl = 0.06* np.log10(Cl_stroma/Cl_lumen) + Dy
+    v_VCCN1 = k_VCCN1 * Cl_flux_relative(driving_force_Cl) * (Cl_stroma + Cl_lumen)/2
+    ##v_VCCN1 is rate of Cl- moving into lumen, v_CLCE is rate of Cl- moving out
+    
+    #here CLCE is assumed one H+ out, two Cl- comes in
+    v_CLCE =  k_CLCE*(driving_force_Cl*2+pmf)*(Cl_stroma + Cl_lumen)*(Hlumen+Hstroma)/4
+    #v_CLCE = k_CLCE *(Cl_lumen * Hlumen - Cl_stroma * Hstroma)
+    
+    net_Cl_lumen_in = v_VCCN1 + 2*v_CLCE
+    dCl_lumen = net_Cl_lumen_in * lumen_protons_per_turnover
+    dCl_stroma = -0.1*dCl_lumen
     
     #***************************************************************************************
     #Buffering capacity and calculation of lumen pH:
     #***************************************************************************************
+    #H_leak = Per_H * ([Hlumen]-[Hstroma])
+    #H_leak = 6.14e4 * (Hlumen - Hstroma)
     # Here, we convert d_protons_in into a "concentration" by dividing by the volumen
-    dHin = net_protons_in*lumen_protons_per_turnover - v_KEA
+    #d_protons_leak = 6.14e4 * (Hlumen*(np.exp(39.5*Dy)) - Hstroma*np.exp(-39.5*Dy))
+    #proton leak rate calculated based on P = 2 x 10^-5 cm/s ==> 6.14 e4 per PSII per s
+    #39.5 = F/RT, it seems the H_leak has a relatively small impact as claimed by
+    #Mordechay SchGnfeld and Hedva Schickler, FEBS letter 1983
+    #The permeability of the thylakoid membrane for protons
+    dHin = (net_protons_in - v_KEA - v_CLCE)*lumen_protons_per_turnover
+    #It looks like earlier code did not calculate v_KEA into H+ concentrations from numbers
+    #v_KEA should be numbers of ion/s across KEA. as indicated in dKlumen
     
     # Here we calculate the change in lumen pH by dividing dHin by the buffering capacity
     dpHlumen= -1*dHin / buffering_capacity 
 
-
+    dHstroma = 0#(net_protons_stroma + v_KEA + v_CLCE)*lumen_protons_per_turnover/10
+    #Assuming the volume of stroma is ten times as that of lumen
+    dpHstroma = -1*dHstroma / buffering_capacity
     #***************************************************************************************
     #Calculation of Dy considering all ion movements and thylakoid membrane capatitance
     #***************************************************************************************
-    delta_charges=charges_from_PSII+PSI_charge_separations + charges_from_b6f + net_Klumen - d_protons_to_ATP
-                
+    delta_charges=charges_from_PSII+PSI_charge_separations + charges_from_b6f \
+                    + d_charge_NDH - v_K_channel - d_H_ATP_or_passive - v_VCCN1- 3*v_CLCE
+    #This net_Klumen does not represent the total charge caused by K+ movement
+    #K+ movement only impacts charges from v_K_channel(added variable in this function)            
     #delta_charges= net_protons_in + net_Klumen # - PSII_recombination_v 
     # recall that PSII_recnotesombination is negative electrogenic 
     #note, I now inclluded this term in the calculation of PSII charge separations
-
+    
     dDy=delta_charges*Volts_per_charge
-    dpmf= .06* dpHlumen + dDy 
+    dpmf= 0.06* dpHlumen + dDy
 
     #calculate changes to deltaGatp
     #assume that deltaGatp is constant (as suggested by past resarch)...is this changes, 
-    #need to consider many metabilic reactions as well
-    ddeltaGatp=0 
-                
+    #need to consider many metabilic reactions as well.
+    #Here we try to consider CBC only
+    #DeltaGatp = 30.0 + 2.44* np.log(ATP_pool/ADP_pool/Pi)
+
+    #ddeltaGatp = deltaGatp - DeltaGatp
+    #d_ATP_consumed = NADPH_pool*k_CBC*(1-np.exp(-t/900))*1.5
+    #if d_ATP_made - d_ATP_consumed < 0:
+    #    dATP_pool = 0
+    #else:
+    dATP_pool= d_ATP_made - d_ATP_consumed
+    dADP_pool= - dATP_pool
     #calculate changes in the concentrations of zeaxanthin (Z) and violaxanthin (V)
     #considering VDE_max_turnover_number, pKvde, VDE_Hill, kZE, and lumen pH
     
@@ -1142,8 +1285,8 @@ def f(y, t, pKreg, max_PSII, kQA, max_b6f, lumen_protons_per_turnover, PAR, ATP_
     
     #calculate NPQ, based on a simple relationahip between
     #the concentration of Z and the protonation state of PsbS
-    #Half contribution from Z but PsbS dependent, half from PsbS alone
-    new_NPQ=0.5*max_NPQ*new_PsbS_H*new_Z+0.5*max_NPQ*new_PsbS_H
+    #Half contribution from Z but mostly PsbS dependent, half from PsbS alone
+    new_NPQ=0.4*max_NPQ*new_PsbS_H*new_Z+0.5*max_NPQ*new_PsbS_H+0.1*max_NPQ*new_Z
     
     #feed this into odeint by calculating the change in NPQ compared to the previous
     #time point
@@ -1152,16 +1295,12 @@ def f(y, t, pKreg, max_PSII, kQA, max_b6f, lumen_protons_per_turnover, PAR, ATP_
     #we re-calculate Phi2 at the start of each iteration of f, so we do not want 
     #odeint to change it
     dPhi2=0 #
-
-    #Calculate changes in the concentrations of ATP and ADP.
-    #for the moment, the consumption of ATP is equal to its production,
-    #so there should be no net changes.
-    dATP_pool=0
-    dADP_pool=0
-
+    #dADP_pool= 0
+    #dATP_pool = 0
+    ddeltaGatp = 0
     return [dQA, dQAm, dPQ, dPQH2, dHin, dpHlumen, dDy, dpmf, ddeltaGatp, dKlumen, dKstroma, 
             d_ATP_made, d_PC_ox, d_PC_red, d_P700_ox, d_P700_red, dZ, dV, dNPQ, dsingletO2, dPhi2, dLEF, 
-            dFd_ox, dFd_red,  dATP_pool, dADP_pool, dNADPH_pool,dNADP_pool]
+            dFd_ox, dFd_red,  dATP_pool, dADP_pool, dNADPH_pool,dNADP_pool, dCl_lumen, dCl_stroma,dHstroma, dpHstroma]
             
 
 #log_progress displays a tiem bar so the users know how long they have to wait
@@ -1221,7 +1360,7 @@ def log_progress(sequence, every=None, size=None):
 #and the set of constants (Kx) to use for the simulaitons
 
 
-def sim(K, initial_states, pulse_times_and_light, max_light_change, points_per_segment, **keyword_parameters):
+def sim(K, initial_states, pulse_times_and_light, max_light_change=1, points_per_segment=1000, **keyword_parameters):
     
     if ('dark_equilibration' in keyword_parameters):
         equibrate_time= keyword_parameters['dark_equilibration']
@@ -1269,7 +1408,7 @@ def do_complete_sim(y, constants_set_and_trace_times, Kx):
         #Currently, the pHstroma is assumed to be constant over the time 
         #of the sub trace.Therefore it appears in both the constants and  
         #the states.
-        pHstroma=constants[7] 
+        #pHstroma=constants[7] 
         
         # The following sets the initial conditions to the values at the end of the previous run 
         # odeint is the function that performs the ODE calculations.
@@ -1292,11 +1431,11 @@ def do_complete_sim(y, constants_set_and_trace_times, Kx):
     # save the results in case we want to start another simulation that starts where this one left off
     end_state = list(soln[-1,:])
 
-    #The following section calculates a number of new parameters from the simulaiton data
-        
+    #The following section calculates a number of new parameters from the simulaiton data    
     # Calculate pmf_total from Dy and delta_pH
     Dy = output['Dy']
     pHlumen = output['pHlumen']
+    pHstroma = output['pHstroma']
     pmf_total= Dy + ((pHstroma-pHlumen)*.06)
     
     # calculate the Phi2 values based on simulation output parameters
@@ -1317,7 +1456,7 @@ def do_complete_sim(y, constants_set_and_trace_times, Kx):
         PhiNO_array.append(PhiNO)
     output['PhiNPQ']=PhiNPQ_array
     output['PhiNO']=PhiNO_array
-    
+
     #Set up an array to contain the light curve (the PAR values), 
     light_curve=[]    
     for i in range(0,len(trace_times)):
@@ -1351,7 +1490,7 @@ def do_complete_sim(y, constants_set_and_trace_times, Kx):
     delta_pH_V=[]
     #fraction_Dy=[]
     for i in range(0,len(pHlumen)):
-        dpH=pHstroma-pHlumen[i]
+        dpH=pHstroma[i]-pHlumen[i]
         dpH_V=dpH*.06
         delta_pH.append(dpH)
         delta_pH_V.append(dpH_V)
@@ -1384,14 +1523,14 @@ def do_complete_sim(y, constants_set_and_trace_times, Kx):
         il_cum=il_cum+light_curve[indexl]*(time_axis[indexl]-time_axis[indexl-1])
         integrated_light.append(il_cum)
     output['integrated_light']=integrated_light
-    output['fraction_Dy']=Dy/pmf_total
-    output['fraction_DpH']=delta_pH_V/pmf_total
+    output['fraction_Dy']=output['Dy']/output['pmf']
+    output['fraction_DpH']=1-output['fraction_Dy']
     
     # Some of the values are 
     # duplicates of existing results, with different keys. 
     # Shouldn't be necessary, but I'm leaving this in for now because
     # other function may be expecting these keys
-
+    
     output['Z']=output['Z_array'] 
     output['V']=output['V_array'] 
     output['NPQ']=NPQ_array 
@@ -1549,7 +1688,7 @@ def plot_interesting_stuff(figure_name, output):
     ax1.yaxis.set_major_formatter(mpl.ticker.ScalarFormatter(useMathText=True, useOffset=True))
     ax1.ticklabel_format(axis='y', style='sci', scilimits=(-2,2))
     ax1b = ax1.twinx()
-    ax1.plot(time_axis, output['pmf_total'], label='total pmf', zorder=3)
+    ax1.plot(time_axis, output['pmf'], label='pmf', zorder=3)
     ax1b.ticklabel_format(axis='y', style='sci', scilimits=(-2,2))
     ax1b.fill_between(time_axis,output['light_curve'],0,color=ltc, alpha=.1, zorder=2)
     ax1.set_xlabel(time_label)
@@ -1573,12 +1712,13 @@ def plot_interesting_stuff(figure_name, output):
     ax2.ticklabel_format(axis='y', style='sci', scilimits=(-2,2))
     ax2b = ax2.twinx()
     ax2.plot(time_axis, output['pHlumen'], label='lumen pH')
+    ax2.plot(time_axis, output['pHstroma'],color = 'green')
     ax2.yaxis.set_major_formatter(FormatStrFormatter('%.1f'))
     ax2.set_xlabel(time_label)
     ax2b.fill_between(time_axis,output['light_curve'],0,color='red', alpha=.1)
     ax2b.set_ylim(0, 1.1*np.max(output['light_curve']))
     ax2b.set_ylabel('intensity')
-    ax2.set_ylabel('pH of lumen')
+    ax2.set_ylabel('pH of lumen and stroma')
     ax2.set_xlim(0, 1.1*np.max(time_axis))
     ax2b.set_xlim(0, 1.1*np.max(time_axis))
     ax2b.yaxis.set_major_formatter(FormatStrFormatter('%.f'))
@@ -1651,11 +1791,13 @@ def plot_interesting_stuff(figure_name, output):
     ax5.ticklabel_format(axis='y', style='sci', scilimits=(-2,2))
     ax5b = ax5.twinx()
     ax5b.ticklabel_format(axis='y', style='sci', scilimits=(-2,2))
-    ax5.plot(time_axis, output['LEF'], color='blue', label='LEF')
-    ax5b.plot(time_axis, output['singletO2_rate'], color='red', label='1O2')
+    ax5.plot(time_axis, 1-output['QAm'], color='green', label='qL')
+    ax5.plot(time_axis, output['Phi2'], color = 'blue',label ='Phi2')
+    ax5b.plot(time_axis, output['NADPH_pool'], color='red', label='NADPH_pool')
+    ax5.plot(time_axis, output['P700_red'], color = 'm', label = 'P700_red')
     ax5.set_xlabel(time_label)
-    ax5.set_ylabel('LEF, ATP')
-    ax5b.set_ylabel(r'$^{1}O_2$')
+    ax5.set_ylabel('qL(green) and Phi2')
+    ax5b.set_ylabel(r'NADPH_pool')
     ax5.set_xlim(0, 1.1*np.max(time_axis))
     ax5b.set_xlim(0, 1.1*np.max(time_axis))
     ax5.tick_params(axis='y', colors='blue')
@@ -1720,7 +1862,7 @@ def plot_interesting_stuff(figure_name, output):
     ax7b.locator_params(axis = 'y', nbins = 4)# (or axis = 'y') 
     ax7c = ax7.twinx()
 
-    ax7.plot(time_axis, output['V'], label='V')
+    #ax7.plot(time_axis, output['V'], label='V')
     ax7c.spines['right'].set_color('orange')
     ax7c.plot(time_axis, output['PsbS_protonated'], label='PsbSH+', color='orange')
     ax7c.set_ylabel('PsbSH+')
@@ -1755,15 +1897,14 @@ def plot_interesting_stuff(figure_name, output):
     ax9.ticklabel_format(axis='y', style='sci', scilimits=(-2,2))
     ax9b = ax9.twinx()
     ax9b.ticklabel_format(axis='y', style='sci', scilimits=(-2,2))
-    ax9.plot(time_axis, output['Phi2'], color='blue', label='Phi2')
+    ax9.plot(time_axis, output['Cl_lumen'], color='blue', label='Cl_lumen')
+    ax9.plot(time_axis, output['Cl_stroma'],color = 'red', label ='Cl_stroma')
     ax9.set_xlabel(time_label)
-    ax9.set_ylabel('Phi2')
+    ax9.set_ylabel(r'$Cl^{-} lumen(blue), stroma(red)$')
     ax9b.fill_between(time_axis,output['light_curve'],0,color='red', alpha=.1)
-    ax9b.plot(time_axis, output['LEF'], color='red', label='LEF')
     ax9b.set_ylim(0, 1.1*np.max(output['light_curve']))
     ax9.set_xlim(0, 1.1*np.max(time_axis))
     ax9b.set_xlim(0, 1.1*np.max(time_axis))
-    ax9b.set_ylabel('intensity (red filled), LEF (blue)')
     ax9.yaxis.label.set_color('blue')
     ax9b.yaxis.label.set_color(ltc)
     ax9.spines['left'].set_color('blue')
@@ -2514,55 +2655,27 @@ class sim_plot(FrozenClass):
         self._freeze() # no new attributes after this point.
 
 
-        
-class States(FrozenClass):
-    def __init__(self):
-        self.QA_content=1
-        self.QAm_content=0.0
-        self.PQ_content=6.0
-        self.PQH2_content=0.0
-        self.Hin=1e-7
-        self.pHlumen=7.0
-        self.Dy=0.1
-        self.pmf=0.18
-        self.DeltaGatp=.42
-        self.Klumen=.04
-        self.Kstroma=.04
-        self.PC_ox=0.0
-        self.PC_red=2.0
-        self.P700_ox=0.0
-        self.P700_red=1.0
-        self.Z=0.0
-        self.V=1.0
-        self.NPQ=0.0
-        self.singletO2=0
-        self.Phi2=0.8
-        self.LEF=0.0
-        self.Fd_ox=1.0
-        self.Fd_red=0.0
-        self.ATP_pool=30.0
-        self.ADP_pool=30.0
-        self.NADPH_pool=0.0
-        self.NADP_pool=1.0
-        self._freeze() # no new attributes after this point.
-
-
-
 #Set up STANDARD initial conditions, most of these values were taken from Cruz et al., 2005
 class standard_constants(object):
     #***************************************************************************************
     #paramweters for V-->Z and Z-->V reactions 
     #***************************************************************************************
-    VDE_max_turnover_number=1
-    pKvde=5.8
+    VDE_max_turnover_number=0.08#changed from 1
+    pKvde=5.65#changed from 6.0
+    #"reviewed in: Peter Jahns a,⁎, Dariusz Latowski b,c, Kazimierz StrzalkaMechanism and
+    #regulation of the violaxanthin cycle: The role of antenna proteins and
+    #membrane lipids. Biochimica et Biophysica Acta 1787 (2009) 3–14" Erhard E. Pfündel*2
+    #and Richard A. Dille, The pH Dependence of Violaxanthin Deepoxidation in lsolated
+    #Pea Chloroplasts. Plant Physiol. (1993) 101: 65-71
+
     VDE_Hill=4 
-    kZE=0.03
+    kZE=0.004 #changed from 0.01
 
     #***************************************************************************************
     #paramweters for PsbS protonation 
     #***************************************************************************************
 
-    pKPsbS=6.0  #pKa for protonation of PsbS, assuming Hill coefficient=1
+    pKPsbS=6.2  #pKa for protonation of PsbS, 6.0-6.5, assuming Hill coefficient=1
     max_NPQ=3  #this max_NPQ is how much PsbS can result in, Zeaxanthin can play half of it
     # but PsbS dependent, PsbS can independent play half of it
 
@@ -2570,16 +2683,31 @@ class standard_constants(object):
     #***************************************************************************************
     #paramweters for ATP SYNTHASE
     #***************************************************************************************
-    ATP_synthase_content=0.32 ##Journal of Experimental Botany, Vol. 65, No. 8, pp. 1955–1972, 2014
+    ATP_synthase_content= 0.367 #0.5 for Photosynth Res 2013 117:1-30
+    # or 0.367 ##Journal of Experimental Botany, Vol. 65, No. 8, pp. 1955–1972, 2014
     #doi:10.1093/jxb/eru090 Advance Access publication 12 March, 2014
-    ATP_synthase_max_turnover=1000*ATP_synthase_content
+    #Molecular Architecture of the Thylakoid Membrane: Lipid Diffusion Space for
+    #Plastoquinone, H. Kirchhoff,*,| U. Mukherjee,| and H.-J. Galla§ Biochemistry 2002, 41, 4872-4882
+    #Heinrich Strotmann and Susanne Bickel-Sandkotter, STRUCTURE, FUNCTION, AND REGULATION OF 
+    #CHLOROPLAST ATPase. Ann. Rev. Plant Physiol. 1984. 35:97-120
+
+    ATP_synthase_max_turnover=200.0#per PSII
+    #or one can use in vitro data of maxrate /ATPase is 400 then
+    #ATP_synthase_max_turnover=400*ATP_synthase_content
+    #this would give a max_turnover from 146.8 to 200 per PSII
+    
+    #However, one may also consider that there is a maximal (saturating turover rate 
+    #(saturation point), as shown by Junesch and Grabber (1991)
+    #http://dx.doi.org/10.1016/0014-5793(91)81447-G
+    #another ref: Ulrike Junesch and Peter Graber, 1987 BBA 275-288
+    #Influence of the redox state an dthe activation of the chloroplast ATP synthase...
 
 
     #***************************************************************************************
     #Membrane capacitance
     #***************************************************************************************
     Thylakoid_membrane_capacitance = 0.6
-    Volts_per_charge=.033 #thylakoid membrane capacitance = 0.6 uF/cmn2
+    Volts_per_charge=0.047 #thylakoid membrane capacitance = 0.6 uF/cm2
 
     
     #print('the DGATP is set to: ' + str(DeltaGatp_KJ_per_mol) + ' kJ/mol, which is: ' + str(DeltaGatp_initial) + ' volts')
@@ -2599,36 +2727,48 @@ class standard_constants(object):
     # Counter ion exchange reactions
     #***************************************************************************************
     #permeability of the thylakoid to K+ 
-    perm_K=6000
-
-
+    perm_K= 150 #if calculated from 3.6*10^-8cm/s, 510 nm2/PSII, then 111/s
+    #Hui Lyu and Dusan Lazar Journal of Theoretical Biology 413 (2017) 11-23
+    #one can play with this parameter to see how it affects the kinectics.
+    
+    #VCCN1 conductance, or Cl- permeability through VCCN1 unit: Cl-/M/V/s
+    #use k_VCCN1 = 180 if Cl_flux_relative is not used.
+    #if Cl_flux_relative function is used, this is rate constant at 0.1 V
+    #unit: Cl-/M/s, normalized to per PSII.
+    k_VCCN1 = 12
+    #k_CLCE is the kinetic constant of CLCE2.
+    k_CLCE = 800000
     #***************************************************************************************
     # b6f reactions
     #***************************************************************************************
-    b6f_content=0.44#Journal of Experimental Botany, Vol. 65, No. 8, pp. 1955–1972, 2014
+    b6f_content=0.433#Journal of Experimental Botany, Vol. 65, No. 8, pp. 1955–1972, 2014
     #doi:10.1093/jxb/eru090 Advance Access publication 12 March, 2014
-    max_b6f=500
-    pKreg=6.5
+    max_b6f=300.0
+    pKreg=6.2
+    #revew: Tikhonov AV 2014 The cytochrome b6f complex at the crossroad of photosynthetic electron transport pathways. Plant Physiol Biochem 81, 163-183
     Em7_PC=0.37
     Em7_PQH2 = 0.11
+    
+    Em_Fd = -0.42
+    k_NDH = 1000.0 # unit s^-1
 
     #***************************************************************************************
     # Lumen proton bufering reactions
     #***************************************************************************************
-    lumen_protons_per_turnover=1.4e-05 #the change in molarity with one H+ transferred to 
+    lumen_protons_per_turnover= 0.000587 #the change in molarity with one H+ transferred to 
     #lumen per PSII
-    buffering_capacity=.03
+    buffering_capacity=0.014
 
     PSI_antenna_size=0.5 #setting this to the same valus as PSII_antenna_size will imply that 
                         #equal numbers of photons hit the two photosystems
 
-    k_PC_to_P700=500 #rate constant for oxidation of PC by P700+
+    k_PC_to_P700=5000 #rate constant for oxidation of PC by P700+
 
     #***************************************************************************************
     # Proton exchange through the KEA3 system
     #***************************************************************************************
 
-    k_KEA=100
+    k_KEA=2500000#this would have significant impact, consider low [H+] in lumen
 
     #***************************************************************************************
     #parameters for PSII reactions 
@@ -2656,6 +2796,7 @@ class standard_constants(object):
     k_Fd_to_NADP=1000 #rate constant for transfer of electrons from Fd to NADP
     
     k_CBC=60 #max rate constant for the Calvin-Benson cycle in terms of NADPH consumption
+    #this number is adjusted based on light intensity.
     
 
 #***************************************************************************************
@@ -2663,41 +2804,27 @@ class standard_constants(object):
 # Initial concentrations and parameters
 #***************************************************************************************
 #***************************************************************************************
-def DG_to_V(DeltaGatp_KJ_per_mol):
-    return(.06*DeltaGatp_KJ_per_mol/5.7)
 
 
 class standard_initial_states(object):
-    V_initial=1
-    Z_initial=0
+    V_initial=1.0
+    Z_initial=0.0
     #start with no ATP made
     ATP_made_initial=0
-    PQH2=0
-    PQ=7#the 6:1 ratio was shown in original appendix file.
-    PC_ox=0
-    PC_red=2
-    pmf=0
-    pHlumen=7
-
-    Klumen_initial=.04
-    Kstroma_initial=.15
+    DeltaGatp_initial =  30.0 + 2.44 * np.log(1/0.0015)#KJ/mol
+    Klumen_initial=0.100
+    Kstroma_initial=0.100
     
-    #***************************************************************************************
-    #DGATP value. The current program will keep this constant
-    #***************************************************************************************
-
-    DeltaGatp_KJ_per_mol=42
-
-    #convert DGATP into volts
-    DeltaGatp_initial=.06*DeltaGatp_KJ_per_mol/5.7
-
+    Cl_lumen_initial = 0.04
+    Cl_stroma_initial = 0.04
+    
 
     #***************************************************************************************
     # Estimate initial pmf
     #***************************************************************************************
     #the initial pmf should be DGATP/N
     n=4.666
-    pmf_initial=DeltaGatp_initial/n
+    pmf_initial=0.0
     #***************************************************************************************
     #Initial lumen pH
     #the following sets up the initial pmf and pH values
@@ -2707,28 +2834,29 @@ class standard_initial_states(object):
     pHstroma_initial=7.8
     #pHstroma=pHstroma_initial
 
-    pHlumen_initial=pHstroma_initial-(pmf_initial/.120) #initially, place abouit half of pmf into DpH
+    pHlumen_initial=7.8 #initially, place abouit half of pmf into DpH
 
     #***************************************************************************************
     #Initial Dy
     #the following sets up the initial Dy
     #***************************************************************************************
 
-    Dy_initial=pmf_initial/2 #place the other half as Dy
+    Dy_initial=0.0 #place the other half as Dy
 
     LEF_initial=0
-    Phi2_initial=.8
+    Phi2_initial=0.83
 
 
     #print('With n=' + str(n) + ', the pmf at equilibrium with DGATP should be set to : ' + str(pmf_initial))
 
     #tell the user what the concentration of free H+ is in the lumen
-    free_H=10**(-1*pmf_initial)
+    #free_H=10**(-1*pmf_initial)
     #print('the estimated concentration of free protons in the lumen = '  + str(free_H))
 
     #tell the user the concentration of total protons in the lumen
     buffering_capacity=0.03
-    Hin_initial=buffering_capacity*(7-pHlumen)
+    Hin_initial= 0.0
+    Hstroma_initial = 0.0
     #print('the concentration of total (free + bound) protons in the lumen = ' + str(Hin_initial))
 
     #pHlumen_initial=7-Hin_initial/buffering_capacity
@@ -2741,7 +2869,7 @@ class standard_initial_states(object):
     #***************************************************************************************
 
     PQH2_content_initial=0
-    PQ_content_initial=6
+    PQ_content_initial=7
 
     #***************************************************************************************
     #parameters for Plastocyanin (PC) reactions 
@@ -2755,7 +2883,9 @@ class standard_initial_states(object):
     #***************************************************************************************
 
     P700_ox_initial=0.0
-    P700_red_initial=0.75
+    P700_red_initial=0.667 #Mathias Pribil1, Mathias Labs1 and Dario Leister1,2,* Structure and dynamics of thylakoids in land plantsJournal of Experimental Botany, Vol. 65, No. 8, pp. 1955–1972, 2014
+    #Fan DY1, Hope AB, Smith PJ, Jia H, Pace RJ, Anderson JM, Chow WS, The stoichiometry of the two photosystems in higher plants revisited. Biochim Biophys Acta. 2007 Aug;1767(8):1064-72
+
     PSI_content=P700_red_initial + P700_ox_initial#PSI/PSII = 0.75, see doi:10.1093/jxb/eru090
     PSI_antenna_size=0.5 #setting this to the same valus as PSII_antenna_size will imply that 
                         #equal numbers of photons hit the two photosystems
@@ -2771,10 +2901,10 @@ class standard_initial_states(object):
     NPQ_initial=0
 
     singletO2_initial=0
-    ATP_pool_initial=30
-    ADP_pool_initial=30
-    NADPH_pool_initial=1
-    NADP_pool_initial=2
+    ATP_pool_initial=4.15#dark ATP/ADP = 1, light ~5, 1 mM ATP under light 1.5 mM Pi constant
+    ADP_pool_initial=4.15
+    NADPH_pool_initial=1.5
+    NADP_pool_initial=3.5
     
 #*******************************************************************************
 #*******************************************************************************
@@ -2792,13 +2922,14 @@ class sim_constants(FrozenClass):
         self.lumen_protons_per_turnover=S.lumen_protons_per_turnover
         self.light_per_L=S.light_per_L
         self.ATP_synthase_max_turnover=S.ATP_synthase_max_turnover
-        self.pHstroma=S.pHstroma_initial
+        #self.pHstroma=S.pHstroma_initial
         self.PSII_antenna_size=S.PSII_antenna_size
         self.Volts_per_charge=S.Volts_per_charge
         self.perm_K=S.perm_K
         self.n=S.n
         self.Em7_PQH2=S.Em7_PQH2
         self.Em7_PC=S.Em7_PC
+        self.Em_Fd = S.Em_Fd
         self.PSI_antenna_size=S.PSI_antenna_size
         self.buffering_capacity=S.buffering_capacity
         self.VDE_max_turnover_number=S.VDE_max_turnover_number
@@ -2815,29 +2946,33 @@ class sim_constants(FrozenClass):
         self.k_Fd_to_NADP=S.k_Fd_to_NADP
         self.k_CBC=S.k_CBC
         self.k_KEA=S.k_KEA
+        self.k_VCCN1 = S.k_VCCN1
+        self.k_CLCE = S.k_CLCE
+        self.k_NDH = S.k_NDH
         
     def as_tuple(self):
         c=(self.pKreg, self.max_PSII, self.kQA, self.max_b6f, self.lumen_protons_per_turnover, self.light_per_L,
-        self.ATP_synthase_max_turnover,self.pHstroma, self.PSII_antenna_size, self.Volts_per_charge, self.perm_K,
-        self.n, self.Em7_PQH2, self.Em7_PC, self.PSI_antenna_size, self.buffering_capacity, 
+        self.ATP_synthase_max_turnover, self.PSII_antenna_size, self.Volts_per_charge, self.perm_K,
+        self.n, self.Em7_PQH2, self.Em7_PC, self.Em_Fd, self.PSI_antenna_size, self.buffering_capacity, 
         self.VDE_max_turnover_number, self.pKvde, self.VDE_Hill, self.kZE, self.pKPsbS, self.max_NPQ, 
         self.k_recomb, self.k_PC_to_P700, self.triplet_yield, self.triplet_to_singletO2_yield, 
-        self.fraction_pH_effect, self.k_Fd_to_NADP, self.k_CBC, self.k_KEA)
+        self.fraction_pH_effect, self.k_Fd_to_NADP, self.k_CBC, self.k_KEA, self.k_VCCN1, self.k_CLCE, self.k_NDH)
         return(c)
     
     def as_dictionary(self):
         
         d={'pKreg':self.pKreg, 'max_PSII':self.max_PSII,'kQA': self.kQA, 'max_b6f': self.max_b6f, 
         'lumen_protons_per_turnover': self.lumen_protons_per_turnover, 'light_per_L':self.light_per_L,
-        'ATP_synthase_max_turnover': self.ATP_synthase_max_turnover, 'pHstroma': self.pHstroma, 
+        'ATP_synthase_max_turnover': self.ATP_synthase_max_turnover,  
         'PSII_antenna_size': self.PSII_antenna_size, 'Volts_per_chargese': self.Volts_per_charge, 
-        'perm_K': self.perm_K, 'n': self.n, 'Em7_PQH2': self.Em7_PQH2, 'Em7_PC': self.Em7_PC, 
+        'perm_K': self.perm_K, 'n': self.n, 'Em7_PQH2': self.Em7_PQH2, 'Em7_PC': self.Em7_PC,'Em_Fd':self.Em_Fd, 
         'PSI_antenna_size': self.PSI_antenna_size, 'buffering_capacity': self.buffering_capacity, 
         'VDE_max_turnover_number': self.VDE_max_turnover_number, 'pKvde': self.pKvde, 'VDE_Hill': self.VDE_Hill, 
         'kZE': self.kZE, 'pKPsbS': self.pKPsbS, 'max_NPQ': self.max_NPQ, 
         'k_recomb': self.k_recomb, 'k_PC_to_P700': self.k_PC_to_P700, 'triplet_yield': self.triplet_yield, 
         'triplet_to_singletO2_yield': self.triplet_to_singletO2_yield, 'fraction_pH_effect': self.fraction_pH_effect, 
-        "k_Fd_to_NADP":self.k_Fd_to_NADP, "k_CBC": self.k_CBC, "k_KEA":self.k_KEA}
+        "k_Fd_to_NADP":self.k_Fd_to_NADP, "k_CBC": self.k_CBC, "k_KEA":self.k_KEA, 'k_VCCN1':self.k_VCCN1,
+        'k_CLCE':self.k_CLCE, 'k_NDH':self.k_NDH}
         return(d)
         
     def short_descriptions(self):
@@ -2848,13 +2983,14 @@ class sim_constants(FrozenClass):
         'lumen_protons_per_turnover': 'The molarity change of protons resulting from 1 H+/standard PSII into the lumen', 
         'light_per_L':'PAR photons per PSII',
         'ATP_synthase_max_turnover': 'Defines the slope of ATP synthesis per pmf', 
-        'pHstroma': 'The pH of the stroma', 
+        
         'PSII_antenna_size': 'The relative antenna size of PSII', 
         'Volts_per_chargese': 'The capcitance of the thylakoid expressed as V/charge/PSII', 
         'perm_K': 'The relative permeability of the thylakoid to counterions', 
         'n': 'The stoichiometry of H+/ATP at the ATP synthase', 
         'Em7_PQH2': 'The midpoint potential of the PQ/PQH2 couple at pH=7', 
-        'Em7_PC': 'The midpoint potential of the plastocyanin couple at pH=7', 
+        'Em7_PC': 'The midpoint potential of the plastocyanin couple at pH=7',
+        'Em_Fd':'The midpoint potential of ferredoxin',
         'PSI_antenna_size': 'The relative cross section of PSI antenna', 
         'buffering_capacity': 'The proton buffering capacity of the lumen in M/pH unit', 
         'VDE_max_turnover_number': 'The maximal turnover of the fully protonated VDE enzyme', 
@@ -2870,7 +3006,10 @@ class sim_constants(FrozenClass):
         'fraction_pH_effect': 'The frqaction of S-states that both involve protons release and can reconbine', 
         "k_Fd_to_NADP":'The second order rate constant for oxidation of Fd by NADP+', 
         "k_CBC": 'The rate constant for a simplified Calvin-Benson Cycle',
-        "k_KEA": 'The rate constant for the KEA H+/H+ antiporter'}
+        "k_KEA": 'The rate constant for the KEA H+/H+ antiporter',
+        'k_VCCN1':'The rate constant for VCCN1 moving Cl- from stroma to lumen',
+        'k_CLCE':'The rate constant for CLCE2 moving Cl- from lumen to stroma, driving by H+ gradient',
+        'k_NDH':'The rate constant for NDH'}
         return(e)
         
         #self._freeze() # no new attributes after this point.
@@ -2907,6 +3046,10 @@ class sim_states(FrozenClass):
         self.ADP_pool=S.ADP_pool_initial
         self.NADPH_pool=S.NADPH_pool_initial
         self.NADP_pool=S.NADP_pool_initial
+        self.Cl_lumen = S.Cl_lumen_initial
+        self.Cl_stroma = S.Cl_stroma_initial
+        self.H_stroma = S.Hstroma_initial
+        self.pHstroma = S.pHstroma_initial
         
     def as_list(self):
             t=[self.QA_content, self.QAm_content, self.PQ_content, 
@@ -2914,7 +3057,8 @@ class sim_states(FrozenClass):
                        self.Klumen, self.Kstroma, self.ATP_made, self.PC_ox, 
                        self.PC_red, self.P700_ox, self.P700_red, self.Z,self.V, self.NPQ,
                        self.singletO2, self.Phi2, self.LEF, self.Fd_ox, self.Fd_red, self.ATP_pool, 
-                       self.ADP_pool, self.NADPH_pool, self.NADP_pool]
+                       self.ADP_pool, self.NADPH_pool, self.NADP_pool, self.Cl_lumen, self.Cl_stroma,
+                       self.H_stroma, self.pHstroma]
             return(t)
         
     def as_tuple(self):
@@ -2923,7 +3067,8 @@ class sim_states(FrozenClass):
                        self.Klumen, self.Kstroma, self.ATP_made, self.PC_ox, 
                        self.PC_red, self.P700_ox, self.P700_red, self.Z,self.V, self.NPQ,
                        self.singletO2, self.Phi2, self.LEF, self.Fd_ox, self.Fd_red, self.ATP_pool, 
-                       self.ADP_pool, self.NADPH_pool, self.NADP_pool])
+                       self.ADP_pool, self.NADPH_pool, self.NADP_pool, self.Cl_lumen, self.Cl_stroma,
+                       self.H_stroma, self.pHstroma])
             return(t)
         
 
@@ -2956,6 +3101,10 @@ class sim_states(FrozenClass):
         self.ADP_pool=Y[25]
         self.NADPH_pool=Y[26]
         self.NADP_pool=Y[27]
+        self.Cl_lumen = Y[28]
+        self.Cl_stroma = Y[29]
+        self.H_stroma = Y[30]
+        self.pHstroma = Y[31]
     
     def as_dictionary(self):
         d={'QA_content': self.QA_content,
@@ -2985,7 +3134,11 @@ class sim_states(FrozenClass):
         'ATP_pool': self.ATP_pool,
         'ADP_pool':self.ADP_pool,
         'NADPH_pool': self.NADPH_pool,
-        'NADP_pool':self.NADP_pool}
+        'NADP_pool':self.NADP_pool,
+        'Cl_lumen':self.Cl_lumen,
+        'Cl_stroma':self.Cl_stroma,
+        'Hstroma':self.H_stroma,
+        'pHstroma':self.pHstroma}
         self._freeze() # no new attributes after this point.
         return(d)
 
@@ -3048,52 +3201,139 @@ def Changed_Constants_Table(table_title, original_values, Kxx):
 
 
 #Display PDFs of the detailed notes describing the simulation parameters
-def display_detailed_notes():
-    from IPython.display import IFrame
-    from IPython.display import Image
+#def display_detailed_notes():
+#    from IPython.display import IFrame
+#    from IPython.display import Image
+#
+#    page1=Image(PDF_file_location + 'Page 1.png')
+#    page2=Image(PDF_file_location + 'Page 2.png')
+#    page3=Image(PDF_file_location + 'Page 3.png')
 
-    page1=Image(PDF_file_location + 'Page 1.png')
-    page2=Image(PDF_file_location + 'Page 2.png')
-    page3=Image(PDF_file_location + 'Page 3.png')
+#    display(page1)
+#    display(page2)
+#    display(page3)
 
-    display(page1)
-    display(page2)
-    display(page3)
-    
-    
+#SAVE A LIST(SIMULATED VALUES) TO CSV FILE
+def list_to_csv(alist, filename):
+    with open(filename,'w',newline='') as f:
+        writer_a = csv.writer(f)
+        for aline in alist:
+            writer_a.writerow(aline)
+#PROCESS A GENOTYPE AND SAVE ITS SIMULATED VALUES
+def process_a_gtype(gtype_dict, parameter_list, out_dict, gtype='a_genotype'):
+    gtype_list = []
+    for para in parameter_list:
+        gtype_dict[para] = out_dict[para]
+        if type(gtype_dict[para]) is list:
+            temp_list0 = gtype_dict[para]
+        else:
+            temp_list0 = gtype_dict[para].tolist()
+        temp_list = [para]+temp_list0[0:3]+temp_list0[50000:51000]+temp_list0[100000:]
+        #this slice is due to too many data points at transition from dark to light, & light to dark
+        gtype_list.append(temp_list)
+    list_to_csv(gtype_list, gtype+'_simulated.csv')
+
+#the following function simulate a specific genotype, change ATPase activation function   
+def sim_a_gtype(gtype_dict, gtype='WT', light = 100):  
+    parameters_of_interest = ['time_axis','NPQ','Phi2','qL','Z','V',\
+                          'pmf','Dy','pHlumen','fraction_Dy','fraction_DpH',\
+                          'Klumen','Cl_lumen','Cl_stroma']
+    #this parameters_of_interest is a list of things exported into csv and compared
+    #between wt and mutants, do_complete_sim dictates how each paarmeter is called
+    #run the code to make all pre-contrived light waves
+    light_pattern=make_waves()    
+    #The following code generates a series of diurnal light patters, with either smooth or fluctuating
+    #patterns
+    initial_sim_states=sim_states()
+    initial_sim_state_list=initial_sim_states.as_list()
+    Kx_initial=sim_constants()    
+    #All_Constants_Table('Standard Constants', Kx_initial)
+    constants_dict={}
+    starting_conditions_dict={}
+    k_CBC_light = 60 * (light/(light+250))#this needs change with different light intensity    
+    ####this following name WT as a dictionary, when WT[parameter] is called,
+    ####it will return the parameter np_array, and is convenient for calculations
+    output_dict={}
+    on = gtype
+    Kx=sim_constants()
+    if 'clce2' in gtype:
+        Kx.k_CLCE = 0
+    if 'kea3' in gtype:
+        Kx.k_KEA =0
+    if 'vccn1' in gtype:
+        Kx.k_VCCN1 =0
+    Kx.k_CBC = k_CBC_light
+    constants_dict[on]=Kx #store constants in constants_dict
+    if light ==100:
+        output_dict, starting_conditions_dict[on]=sim(Kx, initial_sim_state_list, 
+                                            light_pattern['single_square_20_min_100_max'])
+    if light == 500:
+        output_dict, starting_conditions_dict[on]=sim(Kx, initial_sim_state_list, 
+                                            light_pattern['single_square_20_min_500_max'])
+    Changed_Constants_Table('Change Constants', Kx_initial, Kx)
+    output_dict['qL'] = 1-output_dict['QAm']
+    plot_interesting_stuff(gtype, output_dict)
+    process_a_gtype(gtype_dict,parameters_of_interest, output_dict,gtype+'_'+str(light)+'uE')    
 #*******************************************************************************
 #*******************************************************************************
 #                    Startup code to get things set up. 
 #*******************************************************************************
 #********************************************************************************
+"""
+to simulate a genotype, define an empty dictionary, then run sim_a_gtype()
+"""
+
+WT = {}
+sim_a_gtype(WT, 'WT', 100)
+clce2 = {}
+sim_a_gtype(clce2, 'clce2', 100)
+kea3 ={}
+sim_a_gtype(kea3, 'kea3', 100)
+vccn1 = {}
+sim_a_gtype(vccn1,'vccn1', 100)
+cckk ={}
+sim_a_gtype(cckk, 'clce2kea3', 100)
+ccvv ={}
+sim_a_gtype(ccvv,'clce2vccn1', 100)
+v1k3 = {}
+sim_a_gtype(v1k3, 'vccn1kea3', 100)
+vck ={}
+sim_a_gtype(vck, 'vccn1clce2kea3', 100)
 
 
-#run the code to make all pre-contrived light waves
-light_pattern=make_waves()
+"""
+to run a simulation at 500 uE, one needs to ajust the T for ATP_synthase_actvt(t)
+function, default is 165s for 100uE, change it to 60s for 500uE
+"""
 
-#The following code generates a series of diurnal light patters, with either smooth or fluctuating
-#patterns
-initial_sim_states=sim_states()
-initial_sim_state_list=initial_sim_states.as_list()
-Kx_initial=sim_constants()
+#####this following code saves NPQ difs between mutants and WT, simulated####
+##### it can be easily modified to save other difs#####
+mutant_list = [clce2, kea3, vccn1, cckk, ccvv, v1k3, vck]
+mutant_strs = ['clce2', 'kea3','vccn1','cckk','ccvv','v1k3','vck']
+df_list = []
+time_min = WT['time_axis']/60
+time_list = time_min.tolist()
+time_min = ['time/min'] + time_list[0:3]+time_list[50000:51000]+time_list[100000:]
+df_list.append(time_min)
+for idx, a_mutant in enumerate(mutant_list):
+    df_NPQ = a_mutant['NPQ'] - WT['NPQ']
+    df_NPQ_list = df_NPQ.tolist()
+    df_NPQ = [mutant_strs[idx]] + df_NPQ_list[0:3]+df_NPQ_list[50000:51000]+df_NPQ_list[100000:]
+    df_list.append(df_NPQ)
+    plt.plot(time_min[1:],df_NPQ[1:],label = mutant_strs[idx])
+    plt.legend()
+list_to_csv(df_list,'df_NPQ_100_simulated.csv')
+plt.show()
+plt.close()
 
-All_Constants_Table('Standard Constants', Kx_initial)
-output_dict={}
-constants_dict={}
-starting_conditions_dict={}
-on='single square wave permK=normal' #the output name
-
-Kx=sim_constants() #generrate arrays contining optimized time segments for the simulation
-
-constants_dict[on]=Kx #store constants in constants_dict
-
-output_dict[on], starting_conditions_dict[on]=sim(Kx, initial_sim_state_list, 
-                                        light_pattern['single_square_20_min_500_max'], 
-                                        max_light_change, points_per_segment)
-
-Changed_Constants_Table('Change Constants', Kx_initial, Kx)
-
-#plot out the "interesting features"
-plot_interesting_stuff('Test Output 1', output_dict[on])
-
-
+#### the following saves the deltapH fraction kinetics, simulated#####
+GNo_list = [WT]+mutant_list
+GNo_strs = ['WT']+mutant_strs
+f_DpH_all = []
+f_DpH_all.append(['time/min']+time_list[50000:50993])#1s to 19.9 min
+for idx, a_GNo in enumerate(GNo_list):
+    f_DpH = a_GNo['fraction_DpH'].tolist()
+    f_DpH_list = [GNo_strs[idx]] +f_DpH[50000:50993]
+    f_DpH_all.append(f_DpH_list)
+list_to_csv(f_DpH_all, 'f_DpH_simulated_100.csv')
+    

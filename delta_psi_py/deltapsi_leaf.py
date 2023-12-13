@@ -179,6 +179,7 @@ def generate_square_wave_based_light_sequence (baseline_duration, baseline_inten
 
     riser_duration=rise_time*time_div
     riser_points=riser_duration*point_frequency
+    riser_points = int(riser_points)
     riser_start_time = (baseline_points+1) / point_frequency
     riser_end_time = riser_start_time + riser_duration
     riser_time=np.linspace(riser_start_time, riser_end_time, riser_points)
@@ -188,6 +189,7 @@ def generate_square_wave_based_light_sequence (baseline_duration, baseline_inten
     pulse_light=np.append(pulse_light, riser_light)
     pulse_duration=pulse_duration*time_div
     pulse_points=pulse_duration*point_frequency
+    pulse_points = int(pulse_points)
     pulse_start_time = (baseline_points + riser_points +1)/point_frequency
     pulse_end_time = pulse_start_time + pulse_duration
     pulse_time=np.linspace(pulse_start_time, pulse_end_time, pulse_points)
@@ -197,6 +199,7 @@ def generate_square_wave_based_light_sequence (baseline_duration, baseline_inten
     
     falling_duration=rise_time*time_div
     falling_points=riser_duration*point_frequency
+    falling_points = int(falling_points)
     falling_start_time = (baseline_points + riser_points + pulse_points + 1) / point_frequency
     falling_end_time = falling_start_time + falling_duration
     falling_time=np.linspace(falling_start_time, falling_end_time, falling_points)
@@ -291,6 +294,7 @@ def generate_square_wave_based_light_sequence (baseline_duration, baseline_inten
 
     riser_duration=rise_time*time_div
     riser_points=riser_duration*point_frequency
+    riser_points = int(riser_points)
     riser_start_time = (baseline_points+1) / point_frequency
     
     riser_end_time = riser_start_time + riser_duration
@@ -304,6 +308,7 @@ def generate_square_wave_based_light_sequence (baseline_duration, baseline_inten
     
     pulse_duration=pulse_duration*time_div
     pulse_points=pulse_duration*point_frequency
+    pulse_points = int(pulse_points)
     #pulse_start_time = (baseline_points + riser_points +1)/point_frequency
     
     pulse_start_time = pulse_times[-1] + 1/point_frequency
@@ -321,6 +326,7 @@ def generate_square_wave_based_light_sequence (baseline_duration, baseline_inten
     
     falling_duration=rise_time*time_div
     falling_points=riser_duration*point_frequency
+    falling_points = int(falling_points)
     
     #falling_start_time = (baseline_points + riser_points + pulse_points + 1) / point_frequency
     falling_start_time = pulse_times[-1] + 1/point_frequency
